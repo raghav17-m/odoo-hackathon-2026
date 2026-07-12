@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'ecofleet-super-secure-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'egofleat-super-secure-key-2026';
 
 app.use(cors());
 app.use(express.json());

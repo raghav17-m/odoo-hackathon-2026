@@ -71,7 +71,7 @@ export default function Login({ onLoginSuccess }) {
             <Truck className="text-hive-black w-6 h-6" />
           </div>
           <div>
-            <span className="font-bold text-xl tracking-wider text-honey-gold uppercase">EcoFleet</span>
+            <span className="font-bold text-xl tracking-wider text-honey-gold uppercase">Ego Fleat</span>
             <span className="block text-xs text-honey-beige/80">Fleet Management System</span>
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function Login({ onLoginSuccess }) {
         </div>
 
         <div className="text-xs text-honey-beige/60">
-          &copy; {new Date().getFullYear()} EcoFleet. Honeybee Premium Edition.
+          &copy; {new Date().getFullYear()} Ego Fleat. Honeybee Premium Edition.
         </div>
       </div>
 
@@ -120,7 +120,7 @@ export default function Login({ onLoginSuccess }) {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@ecofleet.in"
+                    placeholder="name@egofleat.in"
                     className="w-full pl-12 pr-4 py-3 rounded-xl border border-honey-beige bg-white text-text-primary placeholder:text-text-secondary/40 focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
                     required
                   />
@@ -175,7 +175,7 @@ export default function Login({ onLoginSuccess }) {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@ecofleet.in"
+                    placeholder="name@egofleat.in"
                     className="w-full pl-12 pr-4 py-3 rounded-xl border border-honey-beige bg-white text-text-primary placeholder:text-text-secondary/40 focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
                     required
                   />
@@ -262,7 +262,7 @@ export default function Login({ onLoginSuccess }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => handleQuickLogin('manager@ecofleet.in')}
+                  onClick={() => handleQuickLogin('manager@egofleat.in')}
                   className="flex items-center gap-3 p-3 bg-white hover:bg-honey-beige/25 border border-honey-beige rounded-xl transition-all text-left group shadow-sm hover:shadow cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-lg bg-honey-gold/15 flex items-center justify-center text-honey-dark group-hover:bg-honey-gold group-hover:text-white transition-all">
@@ -275,7 +275,7 @@ export default function Login({ onLoginSuccess }) {
                 </button>
 
                 <button
-                  onClick={() => handleQuickLogin('safety@ecofleet.in')}
+                  onClick={() => handleQuickLogin('safety@egofleat.in')}
                   className="flex items-center gap-3 p-3 bg-white hover:bg-honey-beige/25 border border-honey-beige rounded-xl transition-all text-left group shadow-sm hover:shadow cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-lg bg-warning-orange/15 flex items-center justify-center text-warning-orange group-hover:bg-warning-orange group-hover:text-white transition-all">
@@ -288,7 +288,7 @@ export default function Login({ onLoginSuccess }) {
                 </button>
 
                 <button
-                  onClick={() => handleQuickLogin('finance@ecofleet.in')}
+                  onClick={() => handleQuickLogin('finance@egofleat.in')}
                   className="flex items-center gap-3 p-3 bg-white hover:bg-honey-beige/25 border border-honey-beige rounded-xl transition-all text-left group shadow-sm hover:shadow cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-lg bg-success-green/15 flex items-center justify-center text-success-green group-hover:bg-success-green group-hover:text-white transition-all">
@@ -301,7 +301,7 @@ export default function Login({ onLoginSuccess }) {
                 </button>
 
                 <button
-                  onClick={() => handleQuickLogin('driver@ecofleet.in')}
+                  onClick={() => handleQuickLogin('driver@egofleat.in')}
                   className="flex items-center gap-3 p-3 bg-white hover:bg-honey-beige/25 border border-honey-beige rounded-xl transition-all text-left group shadow-sm hover:shadow cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-lg bg-hive-black/10 flex items-center justify-center text-hive-black group-hover:bg-hive-black group-hover:text-white transition-all">

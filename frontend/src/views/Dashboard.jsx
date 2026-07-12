@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Truck, Navigation, CheckCircle2, AlertTriangle, Users, BarChart3, Filter } from 'lucide-react';
+import TelemetryMap from './TelemetryMap';
 
 export default function Dashboard({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [trips, setTrips] = useState([]);
   
+  // Simulation State
+  const [simSpeed, setSimSpeed] = useState(10); // Default to 10x for visual movements
+
   // Filters
   const [filterType, setFilterType] = useState('');
   const [filterRegion, setFilterRegion] = useState('');
@@ -21,6 +25,20 @@ export default function Dashboard({ user }) {
       setTrips(tList);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
+    }
+  };
+
+  const handleCompleteTripSimulated = async (tripId, plannedDistance) => {
+    try {
+      // Mock average mileage of 5 km per Liter
+      const fuelConsumed = Number((plannedDistance / 5).toFixed(1));
+      await api.trips.complete(tripId, {
+        actual_distance: plannedDistance,
+        fuel_consumed: fuelConsumed
+      });
+      loadData();
+    } catch (err) {
+      console.error('Failed to auto-complete trip during simulation:', err);
     }
   };
 
@@ -110,6 +128,22 @@ export default function Dashboard({ user }) {
               Clear
             </button>
           )}
+
+          {/* Simulation Speed Control */}
+          <div className="flex items-center gap-1.5 border-l border-honey-beige/60 pl-3">
+            <span className="text-[10px] font-bold text-text-secondary uppercase">Sim Speed:</span>
+            <select
+              value={simSpeed}
+              onChange={(e) => setSimSpeed(Number(e.target.value))}
+              className="text-xs bg-bg-warm border border-honey-beige rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-honey-gold font-bold text-honey-dark"
+            >
+              <option value="1">1x (Real-time)</option>
+              <option value="10">10x Speed</option>
+              <option value="50">50x Speed</option>
+              <option value="150">150x Speed</option>
+              <option value="500">500x Speed</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -205,13 +239,22 @@ export default function Dashboard({ user }) {
         </div>
       </div>
 
+      {/* Interactive Telemetry Map */}
+      {vehicles.length > 0 && (
+        <TelemetryMap
+          activeTrips={trips.filter(t => t.status === 'Dispatched')}
+          onCompleteTrip={handleCompleteTripSimulated}
+          simSpeed={simSpeed}
+        />
+      )}
+
       {/* Empty State Banner if no Vehicles are loaded */}
       {vehicles.length === 0 && (
         <div className="bg-white rounded-2xl border border-honey-beige p-12 text-center shadow-premium space-y-3">
           <Truck className="w-12 h-12 text-honey-gold mx-auto stroke-1" />
           <h3 className="text-lg font-bold text-hive-black">No Fleet Assets Registered</h3>
           <p className="text-text-secondary text-sm max-w-md mx-auto">
-            EcoFleet is currently empty. Switch to a <strong>Fleet Manager</strong> role to start registering vehicles and drivers.
+            Ego Fleat is currently empty. Switch to a <strong>Fleet Manager</strong> role to start registering vehicles and drivers.
           </p>
         </div>
       )}

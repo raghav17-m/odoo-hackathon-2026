@@ -133,7 +133,7 @@ export default function App() {
               <Truck className="text-hive-black w-5 h-5" />
             </div>
             <div>
-              <span className="font-extrabold text-sm tracking-wider text-honey-gold uppercase">EcoFleet</span>
+              <span className="font-extrabold text-sm tracking-wider text-honey-gold uppercase">Ego Fleat</span>
               <span className="block text-[9px] text-honey-beige/60">Fleet Intelligence</span>
             </div>
           </div>

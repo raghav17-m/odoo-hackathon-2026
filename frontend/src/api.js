@@ -1,4 +1,4 @@
-// EcoFleet API Integration Layer
+// Ego Fleat API Integration Layer
 // Connects the frontend client to the Express/SQLite REST backend.
 // Implements safe storage logic to fallback gracefully when localStorage is blocked.
 
@@ -7,7 +7,7 @@ const BASE_URL = window.location.origin.includes('localhost:5173')
   : '/api';
 
 const DB_KEYS = {
-  CURRENT_USER: 'ecofleet_current_user',
+  CURRENT_USER: 'egofleat_current_user',
 };
 
 // Safe storage wrapper to prevent crashes in sandbox/iframe preview environments

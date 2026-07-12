@@ -19,10 +19,10 @@ async function main() {
   const hashedPassword = await bcrypt.hash('password', 10);
   
   const users = [
-    { name: 'Rajesh Sharma', email: 'manager@ecofleet.in', password: hashedPassword, role: 'FleetManager' },
-    { name: 'Anjali Desai', email: 'safety@ecofleet.in', password: hashedPassword, role: 'SafetyOfficer' },
-    { name: 'Vikram Mehta', email: 'finance@ecofleet.in', password: hashedPassword, role: 'FinancialAnalyst' },
-    { name: 'Suresh Kumar', email: 'driver@ecofleet.in', password: hashedPassword, role: 'Driver' },
+    { name: 'Rajesh Sharma', email: 'manager@egofleat.in', password: hashedPassword, role: 'FleetManager' },
+    { name: 'Anjali Desai', email: 'safety@egofleat.in', password: hashedPassword, role: 'SafetyOfficer' },
+    { name: 'Vikram Mehta', email: 'finance@egofleat.in', password: hashedPassword, role: 'FinancialAnalyst' },
+    { name: 'Suresh Kumar', email: 'driver@egofleat.in', password: hashedPassword, role: 'Driver' },
   ];
 
   for (const u of users) {

@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "EcoFleet Express Backend API",
+  "description": "Ego Fleat Express Backend API",
   "main": "server.js",
   "type": "module",
   "scripts": {
