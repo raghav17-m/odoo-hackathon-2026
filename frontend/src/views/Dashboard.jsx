@@ -92,7 +92,7 @@ export default function Dashboard({ user }) {
   // ==========================================
   // 1. DRIVER DASHBOARD VIEW
   // ==========================================
-  if (user.role === 'Driver') {
+  if (user?.role?.toLowerCase() === 'driver') {
     // Find active driver profile record by email, falling back to name includes
     const driverRecord = drivers.find(d => d.email === user.email || d.name.toLowerCase().includes(user.name.toLowerCase()));
     
@@ -236,7 +236,7 @@ export default function Dashboard({ user }) {
   // ==========================================
   // 2. SAFETY OFFICER DASHBOARD VIEW
   // ==========================================
-  if (user.role === 'SafetyOfficer') {
+  if (user?.role?.toLowerCase() === 'safetyofficer') {
     // Calculations
     const avgSafetyScore = drivers.length > 0 
       ? Math.round(drivers.reduce((acc, curr) => acc + curr.safety_score, 0) / drivers.length)
@@ -363,7 +363,7 @@ export default function Dashboard({ user }) {
   // ==========================================
   // 3. FINANCIAL ANALYST DASHBOARD VIEW
   // ==========================================
-  if (user.role === 'FinancialAnalyst') {
+  if (user?.role?.toLowerCase() === 'financialanalyst') {
     // Cost Calculations
     const fuelCostTotal = fuelLogs.reduce((acc, curr) => acc + (curr.cost || 0), 0);
     const maintenanceCostTotal = maintenance.reduce((acc, curr) => acc + (curr.status === 'Closed' ? (curr.cost || 0) : 0), 0);

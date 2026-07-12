@@ -69,14 +69,15 @@ export default function App() {
   };
 
   const getAllowedTabs = (role) => {
-    switch (role) {
-      case 'FleetManager':
+    const norm = (role || '').toLowerCase();
+    switch (norm) {
+      case 'fleetmanager':
         return ['dashboard', 'vehicles', 'drivers', 'trips', 'maintenance', 'expenses', 'reports'];
-      case 'SafetyOfficer':
+      case 'safetyofficer':
         return ['dashboard', 'vehicles', 'drivers', 'trips'];
-      case 'FinancialAnalyst':
+      case 'financialanalyst':
         return ['dashboard', 'vehicles', 'drivers', 'expenses', 'reports'];
-      case 'Driver':
+      case 'driver':
         return ['dashboard', 'trips'];
       default:
         return ['dashboard'];

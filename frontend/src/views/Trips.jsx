@@ -31,14 +31,17 @@ export default function Trips({ user }) {
 
   const [completeFormData, setCompleteFormData] = useState({
     actual_distance: '',
-    fuel_consumed: ''
+    fuel_consumed: '',
+    fuel_cost: '',
+    toll_expenses: '',
+    misc_expenses: ''
   });
 
   const [error, setError] = useState('');
   const [completeError, setCompleteError] = useState('');
 
-  const isDriverRole = user.role === 'Driver';
-  const isReadOnly = ['FinancialAnalyst', 'SafetyOfficer'].includes(user.role);
+  const isDriverRole = user?.role?.toLowerCase() === 'driver';
+  const isReadOnly = ['financialanalyst', 'safetyofficer'].includes(user?.role?.toLowerCase());
 
   const loadData = async () => {
     try {
@@ -183,7 +186,10 @@ export default function Trips({ user }) {
     setCompleteError('');
     setCompleteFormData({
       actual_distance: '',
-      fuel_consumed: ''
+      fuel_consumed: '',
+      fuel_cost: '',
+      toll_expenses: '',
+      misc_expenses: ''
     });
     setIsCompleteModalOpen(true);
   };
@@ -274,12 +280,14 @@ export default function Trips({ user }) {
         >
           All
         </button>
-        <button
-          onClick={() => setStatusFilter('Draft')}
-          className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${statusFilter === 'Draft' ? 'bg-honey-gold text-hive-black' : 'hover:bg-bg-warm text-text-secondary'}`}
-        >
-          Drafts
-        </button>
+        {!isDriverRole && (
+          <button
+            onClick={() => setStatusFilter('Draft')}
+            className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${statusFilter === 'Draft' ? 'bg-honey-gold text-hive-black' : 'hover:bg-bg-warm text-text-secondary'}`}
+          >
+            Drafts
+          </button>
+        )}
         <button
           onClick={() => setStatusFilter('Assigned')}
           className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${statusFilter === 'Assigned' ? 'bg-honey-gold text-hive-black' : 'hover:bg-bg-warm text-text-secondary'}`}
@@ -664,8 +672,46 @@ export default function Trips({ user }) {
                   min="0"
                   required
                 />
-                <span className="block text-[10px] text-text-secondary mt-1">Completing will automatically record a fuel log entry for this vehicle.</span>
               </div>
+
+              <div>
+                <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Actual Fuel Cost (₹)</label>
+                <input
+                  type="number"
+                  value={completeFormData.fuel_cost}
+                  onChange={(e) => setCompleteFormData({ ...completeFormData, fuel_cost: e.target.value })}
+                  className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
+                  placeholder="e.g. 3000"
+                  min="0"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Toll Charges (₹)</label>
+                  <input
+                    type="number"
+                    value={completeFormData.toll_expenses}
+                    onChange={(e) => setCompleteFormData({ ...completeFormData, toll_expenses: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
+                    placeholder="e.g. 450"
+                    min="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Misc Expenses (₹)</label>
+                  <input
+                    type="number"
+                    value={completeFormData.misc_expenses}
+                    onChange={(e) => setCompleteFormData({ ...completeFormData, misc_expenses: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
+                    placeholder="e.g. 200"
+                    min="0"
+                  />
+                </div>
+              </div>
+              <span className="block text-[10px] text-text-secondary mt-1">Completing will automatically record fuel logs and operating expenses for analytics.</span>
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-honey-beige text-right">
                 <button

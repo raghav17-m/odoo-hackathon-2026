@@ -595,7 +595,7 @@ app.post('/api/trips/:id/accept', authenticateToken, async (req, res) => {
       const driver = await tx.driver.findUnique({ where: { id: trip.driver_id } });
       if (!driver) throw new Error('Driver assigned to trip no longer exists.');
 
-      if (req.user.role === 'Driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
+      if (req.user.role?.toLowerCase() === 'driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
         throw new Error('You are not authorized to accept this trip.');
       }
 
@@ -643,7 +643,7 @@ app.post('/api/trips/:id/decline', authenticateToken, async (req, res) => {
       const driver = await tx.driver.findUnique({ where: { id: trip.driver_id } });
       if (!driver) throw new Error('Driver assigned to trip no longer exists.');
 
-      if (req.user.role === 'Driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
+      if (req.user.role?.toLowerCase() === 'driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
         throw new Error('You are not authorized to decline this trip.');
       }
 
@@ -677,10 +677,13 @@ app.post('/api/trips/:id/decline', authenticateToken, async (req, res) => {
 
 app.post('/api/trips/:id/complete', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { actual_distance, fuel_consumed } = req.body;
+  const { actual_distance, fuel_consumed, fuel_cost, toll_expenses, misc_expenses } = req.body;
 
   const actualDistanceNum = Number(actual_distance);
   const fuelConsumedNum = Number(fuel_consumed);
+  const fuelCostNum = fuel_cost ? Number(fuel_cost) : 0;
+  const tollExpensesNum = toll_expenses ? Number(toll_expenses) : 0;
+  const miscExpensesNum = misc_expenses ? Number(misc_expenses) : 0;
 
   if (isNaN(actualDistanceNum) || actualDistanceNum <= 0) {
     return res.status(400).json({ message: 'Actual distance must be a positive number.' });
@@ -724,16 +727,49 @@ app.post('/api/trips/:id/complete', authenticateToken, async (req, res) => {
         data: { status: 'Available' },
       });
 
+      const currentDateStr = new Date().toISOString().split('T')[0];
+
       if (fuelConsumedNum > 0 && vehicle) {
-        const fuelCost = fuelConsumedNum * 100;
+        const finalFuelCost = fuelCostNum > 0 ? fuelCostNum : (fuelConsumedNum * 100);
         await tx.fuelLog.create({
           data: {
             vehicle_id: trip.vehicle_id,
             trip_id: trip.id,
             liters: fuelConsumedNum,
-            cost: fuelCost,
-            date: new Date().toISOString().split('T')[0],
+            cost: finalFuelCost,
+            date: currentDateStr,
           },
+        });
+
+        await tx.expense.create({
+          data: {
+            vehicle_id: trip.vehicle_id,
+            type: 'Fuel',
+            amount: finalFuelCost,
+            date: currentDateStr,
+          }
+        });
+      }
+
+      if (tollExpensesNum > 0 && vehicle) {
+        await tx.expense.create({
+          data: {
+            vehicle_id: trip.vehicle_id,
+            type: 'Toll',
+            amount: tollExpensesNum,
+            date: currentDateStr,
+          }
+        });
+      }
+
+      if (miscExpensesNum > 0 && vehicle) {
+        await tx.expense.create({
+          data: {
+            vehicle_id: trip.vehicle_id,
+            type: 'Other',
+            amount: miscExpensesNum,
+            date: currentDateStr,
+          }
         });
       }
 
