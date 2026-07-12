@@ -89,10 +89,10 @@ export const api = {
       safeStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(response));
       return response;
     },
-    register: async (name, email, password, role) => {
+    register: async (name, email, password, role, driverData = {}) => {
       const response = await request('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, email, password, role, ...driverData }),
       });
       safeStorage.setItem(DB_KEYS.CURRENT_USER, JSON.stringify(response));
       return response;

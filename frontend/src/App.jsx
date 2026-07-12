@@ -257,24 +257,7 @@ export default function App() {
                 </div>
               )}
             </div>
-
-            {/* Test Role Simulator */}
-            <div className="flex items-center gap-3 bg-bg-warm border border-honey-beige px-3 py-1.5 rounded-xl shadow-inner">
-              <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-honey-dark uppercase tracking-wider">
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Simulate Role:</span>
-              </div>
-              <select
-                value={currentUser.role}
-                onChange={(e) => handleSimulatedRoleChange(e.target.value)}
-                className="text-[11px] font-bold bg-transparent focus:outline-none cursor-pointer text-hive-black"
-              >
-                <option value="FleetManager">Fleet Manager</option>
-                <option value="SafetyOfficer">Safety Officer</option>
-                <option value="FinancialAnalyst">Financial Analyst</option>
-                <option value="Driver">Driver Portal</option>
-              </select>
-            </div>
+            {/* Alerts end */}
           </div>
         </header>
 

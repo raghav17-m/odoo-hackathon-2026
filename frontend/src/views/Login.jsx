@@ -9,6 +9,13 @@ export default function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('FleetManager');
+  
+  // Driver Form States
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseCategory, setLicenseCategory] = useState('Heavy Vehicle');
+  const [licenseExpiryDate, setLicenseExpiryDate] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -37,7 +44,16 @@ export default function Login({ onLoginSuccess }) {
 
     setLoading(true);
     try {
-      const user = await api.auth.register(name, email, password, role);
+      let driverData = {};
+      if (role === 'Driver') {
+        driverData = {
+          license_number: licenseNumber,
+          license_category: licenseCategory,
+          license_expiry_date: licenseExpiryDate,
+          contact_number: contactNumber
+        };
+      }
+      const user = await api.auth.register(name, email, password, role, driverData);
       onLoginSuccess(user);
     } catch (err) {
       setError(err.message || 'An error occurred during registration.');
@@ -195,6 +211,62 @@ export default function Login({ onLoginSuccess }) {
                   <option value="Driver">Driver Portal</option>
                 </select>
               </div>
+
+              {role === 'Driver' && (
+                <div className="space-y-4 border border-honey-beige bg-bg-warm/40 p-4 rounded-2xl animate-fade-in my-2">
+                  <span className="block text-[10px] font-extrabold text-honey-dark uppercase tracking-wider mb-2">Driver Credentials</span>
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">License Number</label>
+                    <input
+                      type="text"
+                      value={licenseNumber}
+                      onChange={(e) => setLicenseNumber(e.target.value)}
+                      placeholder="e.g. DL-1420261234"
+                      className="w-full px-3 py-2 rounded-xl border border-honey-beige bg-white text-text-primary text-xs focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">License Category</label>
+                      <select
+                        value={licenseCategory}
+                        onChange={(e) => setLicenseCategory(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-honey-beige bg-white text-text-primary text-xs focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
+                      >
+                        <option value="Heavy Vehicle">Heavy Vehicle</option>
+                        <option value="Light Vehicle">Light Vehicle</option>
+                        <option value="Hazardous Goods">Hazardous Goods</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">Expiry Date</label>
+                      <input
+                        type="date"
+                        value={licenseExpiryDate}
+                        onChange={(e) => setLicenseExpiryDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-honey-beige bg-white text-text-primary text-xs focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">Contact Number</label>
+                    <input
+                      type="tel"
+                      value={contactNumber}
+                      onChange={(e) => setContactNumber(e.target.value)}
+                      placeholder="e.g. +91 98765 43210"
+                      className="w-full px-3 py-2 rounded-xl border border-honey-beige bg-white text-text-primary text-xs focus:outline-none focus:ring-2 focus:ring-honey-gold focus:border-transparent transition-all shadow-sm"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Password</label>

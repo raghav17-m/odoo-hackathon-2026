@@ -96,7 +96,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, license_number, license_category, license_expiry_date, contact_number } = req.body;
   if (!name || !email || !password || !role) {
     return res.status(400).json({ message: 'All fields are required.' });
   }
@@ -111,13 +111,44 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role,
-      },
+
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name,
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          role,
+        },
+      });
+
+      if (role === 'Driver') {
+        if (!license_number || !license_category || !license_expiry_date || !contact_number) {
+          throw new Error('Driver fields (License details and Contact Number) are required.');
+        }
+
+        const isDuplicateLicense = await tx.driver.findUnique({
+          where: { license_number: license_number.toLowerCase() },
+        });
+
+        if (isDuplicateLicense) {
+          throw new Error(`License number "${license_number}" is already registered.`);
+        }
+
+        await tx.driver.create({
+          data: {
+            name,
+            license_number: license_number.toLowerCase(),
+            license_category,
+            license_expiry_date,
+            contact_number,
+            safety_score: 100,
+            status: 'Available',
+          },
+        });
+      }
+
+      return user;
     });
 
     const token = jwt.sign(
@@ -135,7 +166,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
