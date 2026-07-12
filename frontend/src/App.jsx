@@ -40,7 +40,7 @@ export default function App() {
   const handleSimulatedRoleChange = (newRole) => {
     if (!currentUser) return;
     const updated = { ...currentUser, role: newRole };
-    localStorage.setItem('transitops_current_user', JSON.stringify(updated));
+    api.auth.setCurrentUser(updated);
     setCurrentUser(updated);
     
     // Auto-adjust active tab if it's no longer allowed

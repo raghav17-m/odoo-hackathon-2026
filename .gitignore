@@ -1,0 +1,18 @@
+# Dependency directories
+node_modules/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Databases (SQLite)
+*.db
+*.db-journal
+
+# IDE and System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.gemini/

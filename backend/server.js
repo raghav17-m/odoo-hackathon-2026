@@ -1,0 +1,762 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const prisma = new PrismaClient();
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'transitops-super-secure-key-2026';
+
+app.use(cors());
+app.use(express.json());
+
+// JWT Authentication Middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token missing' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// --- AUTHENTICATION ---
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, name: user.name, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role } = req.body;
+  if (!name || !email || !password || !role) {
+    return res.status(400).json({ message: 'All fields are required.' });
+  }
+
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email is already registered.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role,
+      },
+    });
+
+    const token = jwt.sign(
+      { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      token,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- VEHICLES ---
+app.get('/api/vehicles', authenticateToken, async (req, res) => {
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      orderBy: { registration_number: 'asc' },
+    });
+    res.json(vehicles);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/vehicles', authenticateToken, async (req, res) => {
+  const { registration_number, name_model, type, max_load_capacity, odometer, acquisition_cost, region, status } = req.body;
+
+  if (!registration_number || !name_model || !type) {
+    return res.status(400).json({ message: 'Missing required vehicle fields.' });
+  }
+
+  try {
+    const isDuplicate = await prisma.vehicle.findUnique({
+      where: { registration_number: registration_number.toLowerCase() },
+    });
+
+    if (isDuplicate) {
+      return res.status(400).json({ message: `Vehicle registration number "${registration_number}" already exists.` });
+    }
+
+    const newVehicle = await prisma.vehicle.create({
+      data: {
+        registration_number: registration_number.toLowerCase(),
+        name_model,
+        type,
+        max_load_capacity: Number(max_load_capacity),
+        odometer: Number(odometer),
+        acquisition_cost: Number(acquisition_cost),
+        region,
+        status: status || 'Available',
+      },
+    });
+
+    res.status(201).json(newVehicle);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.put('/api/vehicles/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { registration_number, name_model, type, max_load_capacity, odometer, acquisition_cost, region, status } = req.body;
+
+  try {
+    const vehicle = await prisma.vehicle.findUnique({ where: { id } });
+    if (!vehicle) {
+      return res.status(404).json({ message: 'Vehicle not found.' });
+    }
+
+    if (registration_number) {
+      const isDuplicate = await prisma.vehicle.findFirst({
+        where: {
+          id: { not: id },
+          registration_number: registration_number.toLowerCase(),
+        },
+      });
+
+      if (isDuplicate) {
+        return res.status(400).json({ message: `Vehicle registration number "${registration_number}" already exists.` });
+      }
+    }
+
+    const updatedVehicle = await prisma.vehicle.update({
+      where: { id },
+      data: {
+        registration_number: registration_number ? registration_number.toLowerCase() : undefined,
+        name_model,
+        type,
+        max_load_capacity: max_load_capacity !== undefined ? Number(max_load_capacity) : undefined,
+        odometer: odometer !== undefined ? Number(odometer) : undefined,
+        acquisition_cost: acquisition_cost !== undefined ? Number(acquisition_cost) : undefined,
+        region,
+        status,
+      },
+    });
+
+    res.json(updatedVehicle);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.delete('/api/vehicles/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const hasTrips = await prisma.trip.findFirst({
+      where: { vehicle_id: id },
+    });
+
+    if (hasTrips) {
+      return res.status(400).json({ message: 'Cannot delete vehicle. It is referenced in existing trips.' });
+    }
+
+    await prisma.vehicle.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- DRIVERS ---
+app.get('/api/drivers', authenticateToken, async (req, res) => {
+  try {
+    const drivers = await prisma.driver.findMany({
+      orderBy: { name: 'asc' },
+    });
+    res.json(drivers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/drivers', authenticateToken, async (req, res) => {
+  const { name, license_number, license_category, license_expiry_date, contact_number, safety_score, status } = req.body;
+
+  if (!name || !license_number || !license_category || !license_expiry_date) {
+    return res.status(400).json({ message: 'Missing required driver fields.' });
+  }
+
+  try {
+    const isDuplicate = await prisma.driver.findUnique({
+      where: { license_number: license_number.toLowerCase() },
+    });
+
+    if (isDuplicate) {
+      return res.status(400).json({ message: `License number "${license_number}" is already registered.` });
+    }
+
+    const newDriver = await prisma.driver.create({
+      data: {
+        name,
+        license_number: license_number.toLowerCase(),
+        license_category,
+        license_expiry_date,
+        contact_number,
+        safety_score: safety_score !== undefined ? Number(safety_score) : 100,
+        status: status || 'Available',
+      },
+    });
+
+    res.status(201).json(newDriver);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.put('/api/drivers/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, license_number, license_category, license_expiry_date, contact_number, safety_score, status } = req.body;
+
+  try {
+    const driver = await prisma.driver.findUnique({ where: { id } });
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found.' });
+    }
+
+    if (license_number) {
+      const isDuplicate = await prisma.driver.findFirst({
+        where: {
+          id: { not: id },
+          license_number: license_number.toLowerCase(),
+        },
+      });
+
+      if (isDuplicate) {
+        return res.status(400).json({ message: `License number "${license_number}" is already registered.` });
+      }
+    }
+
+    const updatedDriver = await prisma.driver.update({
+      where: { id },
+      data: {
+        name,
+        license_number: license_number ? license_number.toLowerCase() : undefined,
+        license_category,
+        license_expiry_date,
+        contact_number,
+        safety_score: safety_score !== undefined ? Number(safety_score) : undefined,
+        status,
+      },
+    });
+
+    res.json(updatedDriver);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.delete('/api/drivers/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const hasTrips = await prisma.trip.findFirst({
+      where: { driver_id: id },
+    });
+
+    if (hasTrips) {
+      return res.status(400).json({ message: 'Cannot delete driver. They are referenced in existing trips.' });
+    }
+
+    await prisma.driver.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- TRIPS ---
+app.get('/api/trips', authenticateToken, async (req, res) => {
+  try {
+    const trips = await prisma.trip.findMany({
+      orderBy: { created_at: 'desc' },
+    });
+    res.json(trips);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips', authenticateToken, async (req, res) => {
+  const { vehicle_id, driver_id, source, destination, cargo_weight, planned_distance } = req.body;
+
+  if (!vehicle_id || !driver_id || !source || !destination || !cargo_weight || !planned_distance) {
+    return res.status(400).json({ message: 'Missing required trip fields.' });
+  }
+
+  try {
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicle_id } });
+    const driver = await prisma.driver.findUnique({ where: { id: driver_id } });
+
+    if (!vehicle) return res.status(400).json({ message: 'Selected vehicle does not exist.' });
+    if (!driver) return res.status(400).json({ message: 'Selected driver does not exist.' });
+
+    if (['Retired', 'InShop'].includes(vehicle.status)) {
+      return res.status(400).json({ message: `Vehicle is currently ${vehicle.status} and cannot be assigned to a trip.` });
+    }
+
+    if (driver.status === 'Suspended') {
+      return res.status(400).json({ message: 'Driver is currently Suspended.' });
+    }
+
+    const expiry = new Date(driver.license_expiry_date);
+    if (expiry < new Date()) {
+      return res.status(400).json({ message: 'Driver license is expired.' });
+    }
+
+    if (vehicle.status === 'OnTrip') {
+      return res.status(400).json({ message: 'Vehicle is already on a trip.' });
+    }
+    if (driver.status === 'OnTrip') {
+      return res.status(400).json({ message: 'Driver is already on a trip.' });
+    }
+
+    const cargoWeightNum = Number(cargo_weight);
+    if (cargoWeightNum > vehicle.max_load_capacity) {
+      return res.status(400).json({ message: `${cargoWeightNum}kg exceeds ${vehicle.registration_number}'s ${vehicle.max_load_capacity}kg capacity.` });
+    }
+
+    const newTrip = await prisma.trip.create({
+      data: {
+        vehicle_id,
+        driver_id,
+        source,
+        destination,
+        cargo_weight: cargoWeightNum,
+        planned_distance: Number(planned_distance),
+        status: 'Draft',
+      },
+    });
+
+    res.status(201).json(newTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips/:id/dispatch', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const trip = await prisma.trip.findUnique({ where: { id } });
+    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+
+    if (trip.status !== 'Draft') {
+      return res.status(400).json({ message: 'Only Draft trips can be dispatched.' });
+    }
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: trip.vehicle_id } });
+    const driver = await prisma.driver.findUnique({ where: { id: trip.driver_id } });
+
+    if (!vehicle || !driver) {
+      return res.status(400).json({ message: 'Vehicle or Driver assigned to trip no longer exists.' });
+    }
+
+    if (vehicle.status === 'OnTrip') return res.status(400).json({ message: 'Vehicle is already OnTrip.' });
+    if (driver.status === 'OnTrip') return res.status(400).json({ message: 'Driver is already OnTrip.' });
+    if (['Retired', 'InShop'].includes(vehicle.status)) return res.status(400).json({ message: 'Vehicle is not available.' });
+    if (driver.status === 'Suspended' || new Date(driver.license_expiry_date) < new Date()) {
+      return res.status(400).json({ message: 'Driver is ineligible.' });
+    }
+
+    // Update statuses
+    const updatedTrip = await prisma.trip.update({
+      where: { id },
+      data: {
+        status: 'Dispatched',
+        dispatched_at: new Date(),
+      },
+    });
+
+    await prisma.vehicle.update({
+      where: { id: trip.vehicle_id },
+      data: { status: 'OnTrip' },
+    });
+
+    await prisma.driver.update({
+      where: { id: trip.driver_id },
+      data: { status: 'OnTrip' },
+    });
+
+    res.json(updatedTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips/:id/complete', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { actual_distance, fuel_consumed } = req.body;
+
+  const actualDistanceNum = Number(actual_distance);
+  const fuelConsumedNum = Number(fuel_consumed);
+
+  if (isNaN(actualDistanceNum) || actualDistanceNum <= 0) {
+    return res.status(400).json({ message: 'Actual distance must be a positive number.' });
+  }
+  if (isNaN(fuelConsumedNum) || fuelConsumedNum < 0) {
+    return res.status(400).json({ message: 'Fuel consumed must be a non-negative number.' });
+  }
+
+  try {
+    const trip = await prisma.trip.findUnique({ where: { id } });
+    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+
+    if (trip.status !== 'Dispatched') {
+      return res.status(400).json({ message: 'Only Dispatched trips can be completed.' });
+    }
+
+    const updatedTrip = await prisma.trip.update({
+      where: { id },
+      data: {
+        status: 'Completed',
+        completed_at: new Date(),
+        actual_distance: actualDistanceNum,
+        fuel_consumed: fuelConsumedNum,
+      },
+    });
+
+    // Update vehicle odometer and status
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: trip.vehicle_id } });
+    if (vehicle) {
+      await prisma.vehicle.update({
+        where: { id: trip.vehicle_id },
+        data: {
+          status: 'Available',
+          odometer: Number(vehicle.odometer || 0) + actualDistanceNum,
+        },
+      });
+    }
+
+    // Update driver status
+    await prisma.driver.update({
+      where: { id: trip.driver_id },
+      data: { status: 'Available' },
+    });
+
+    // Create fuel log if fuel consumed
+    if (fuelConsumedNum > 0 && vehicle) {
+      const fuelCost = fuelConsumedNum * 100;
+      await prisma.fuelLog.create({
+        data: {
+          vehicle_id: trip.vehicle_id,
+          trip_id: trip.id,
+          liters: fuelConsumedNum,
+          cost: fuelCost,
+          date: new Date().toISOString().split('T')[0],
+        },
+      });
+    }
+
+    res.json(updatedTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips/:id/cancel', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const trip = await prisma.trip.findUnique({ where: { id } });
+    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+
+    const originalStatus = trip.status;
+    if (!['Draft', 'Dispatched'].includes(originalStatus)) {
+      return res.status(400).json({ message: 'Only Draft or Dispatched trips can be cancelled.' });
+    }
+
+    const updatedTrip = await prisma.trip.update({
+      where: { id },
+      data: { status: 'Cancelled' },
+    });
+
+    if (originalStatus === 'Dispatched') {
+      await prisma.vehicle.update({
+        where: { id: trip.vehicle_id },
+        data: { status: 'Available' },
+      });
+      await prisma.driver.update({
+        where: { id: trip.driver_id },
+        data: { status: 'Available' },
+      });
+    }
+
+    res.json(updatedTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- MAINTENANCE ---
+app.get('/api/maintenance', authenticateToken, async (req, res) => {
+  try {
+    const maintenanceLogs = await prisma.maintenance.findMany({
+      orderBy: { created_at: 'desc' },
+    });
+    res.json(maintenanceLogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/maintenance', authenticateToken, async (req, res) => {
+  const { vehicle_id, type, description, cost } = req.body;
+
+  if (!vehicle_id || !type || cost === undefined) {
+    return res.status(400).json({ message: 'Missing required maintenance fields.' });
+  }
+
+  try {
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicle_id } });
+    if (!vehicle) {
+      return res.status(404).json({ message: 'Vehicle not found.' });
+    }
+
+    if (vehicle.status === 'Retired') {
+      return res.status(400).json({ message: 'Cannot put a Retired vehicle into maintenance.' });
+    }
+
+    const newLog = await prisma.maintenance.create({
+      data: {
+        vehicle_id,
+        type,
+        description,
+        cost: Number(cost),
+        status: 'Open',
+      },
+    });
+
+    await prisma.vehicle.update({
+      where: { id: vehicle_id },
+      data: { status: 'InShop' },
+    });
+
+    res.status(201).json(newLog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/maintenance/:id/close', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const log = await prisma.maintenance.findUnique({ where: { id } });
+    if (!log) {
+      return res.status(404).json({ message: 'Maintenance record not found.' });
+    }
+
+    if (log.status !== 'Open') {
+      return res.status(400).json({ message: 'Record is already closed.' });
+    }
+
+    const updatedLog = await prisma.maintenance.update({
+      where: { id },
+      data: {
+        status: 'Closed',
+        closed_at: new Date(),
+      },
+    });
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: log.vehicle_id } });
+    if (vehicle && vehicle.status !== 'Retired') {
+      await prisma.vehicle.update({
+        where: { id: log.vehicle_id },
+        data: { status: 'Available' },
+      });
+    }
+
+    res.json(updatedLog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- FUEL LOGS ---
+app.get('/api/fuel', authenticateToken, async (req, res) => {
+  try {
+    const fuelLogs = await prisma.fuelLog.findMany({
+      orderBy: { date: 'desc' },
+    });
+    res.json(fuelLogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/fuel', authenticateToken, async (req, res) => {
+  const { vehicle_id, trip_id, liters, cost, date } = req.body;
+
+  if (!vehicle_id || liters === undefined || cost === undefined || !date) {
+    return res.status(400).json({ message: 'Missing required fuel log fields.' });
+  }
+
+  try {
+    const vehicleExists = await prisma.vehicle.findUnique({ where: { id: vehicle_id } });
+    if (!vehicleExists) {
+      return res.status(400).json({ message: 'Vehicle does not exist.' });
+    }
+
+    const newLog = await prisma.fuelLog.create({
+      data: {
+        vehicle_id,
+        trip_id: trip_id || null,
+        liters: Number(liters),
+        cost: Number(cost),
+        date,
+      },
+    });
+
+    res.status(201).json(newLog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- EXPENSES ---
+app.get('/api/expenses', authenticateToken, async (req, res) => {
+  try {
+    const expenses = await prisma.expense.findMany({
+      orderBy: { date: 'desc' },
+    });
+    res.json(expenses);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.post('/api/expenses', authenticateToken, async (req, res) => {
+  const { vehicle_id, type, amount, date } = req.body;
+
+  if (!vehicle_id || !type || amount === undefined || !date) {
+    return res.status(400).json({ message: 'Missing required expense fields.' });
+  }
+
+  try {
+    const vehicleExists = await prisma.vehicle.findUnique({ where: { id: vehicle_id } });
+    if (!vehicleExists) {
+      return res.status(400).json({ message: 'Vehicle does not exist.' });
+    }
+
+    const newExpense = await prisma.expense.create({
+      data: {
+        vehicle_id,
+        type,
+        amount: Number(amount),
+        date,
+      },
+    });
+
+    res.status(201).json(newExpense);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// Serve static assets from frontend
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+// SPA Wildcard Route to serve index.html for non-API frontend paths
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
