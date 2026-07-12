@@ -73,6 +73,7 @@ async function main() {
   const drivers = [
     {
       name: 'Suresh Kumar',
+      email: 'driver@egofleat.in',
       license_number: 'DL-1420180098765',
       license_category: 'TRANS',
       license_expiry_date: '2028-12-31',
@@ -82,6 +83,7 @@ async function main() {
     },
     {
       name: 'Amit Patel',
+      email: 'patel@egofleat.in',
       license_number: 'MH-1220150034567',
       license_category: 'HMV',
       license_expiry_date: '2027-06-15',
@@ -91,6 +93,7 @@ async function main() {
     },
     {
       name: 'Rajinder Singh',
+      email: 'singh@egofleat.in',
       license_number: 'PB-1020200011223',
       license_category: 'LMV',
       license_expiry_date: '2029-01-20',

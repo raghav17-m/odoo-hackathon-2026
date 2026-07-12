@@ -35,6 +35,7 @@ model Vehicle {
 model Driver {
   id                   String   @id @default(uuid())
   name                 String
+  email                String?  @unique
   license_number       String   @unique
   license_category     String
   license_expiry_date  String

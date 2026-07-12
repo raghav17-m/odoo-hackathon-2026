@@ -1,13 +1,15 @@
 import React, { useRef, useEffect, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Truck, MapPin } from 'lucide-react';
 
 const HUBS = {
-  delhi: { name: 'Delhi Hub', x: 220, y: 80 },
-  mumbai: { name: 'Mumbai Logistics', x: 130, y: 260 },
-  pune: { name: 'Pune Depot', x: 150, y: 290 },
-  kolkata: { name: 'Kolkata Port', x: 380, y: 190 },
-  bangalore: { name: 'Bangalore Hub', x: 200, y: 400 },
-  chennai: { name: 'Chennai Port', x: 240, y: 420 },
+  delhi: { name: 'Delhi Hub', lat: 28.6139, lng: 77.2090 },
+  mumbai: { name: 'Mumbai Logistics', lat: 19.0760, lng: 72.8777 },
+  pune: { name: 'Pune Depot', lat: 18.5204, lng: 73.8567 },
+  kolkata: { name: 'Kolkata Port', lat: 22.5726, lng: 88.3639 },
+  bangalore: { name: 'Bangalore Hub', lat: 12.9716, lng: 77.5946 },
+  chennai: { name: 'Chennai Port', lat: 13.0827, lng: 80.2707 },
 };
 
 function getHubCoordinate(name) {
@@ -19,18 +21,24 @@ function getHubCoordinate(name) {
   if (norm.includes('bangalore') || norm.includes('bengaluru')) return HUBS.bangalore;
   if (norm.includes('chennai') || norm.includes('madras')) return HUBS.chennai;
 
-  // Stable hash fallback coordinates within Indian map box
+  // Fallback hash mapping to ensure stable Indian sub-continent coordinates
   let hash = 0;
   for (let i = 0; i < norm.length; i++) {
     hash = norm.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const x = 120 + Math.abs((hash % 200));
-  const y = 100 + Math.abs(((hash >> 3) % 250));
-  return { name: name, x, y };
+  const lat = 15.0 + Math.abs((hash % 12));
+  const lng = 73.0 + Math.abs(((hash >> 3) % 12));
+  return { name: name, lat, lng };
 }
 
 export default function TelemetryMap({ activeTrips, onCompleteTrip, simSpeed }) {
-  const canvasRef = useRef(null);
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  
+  // Stored references for markers and route polylines to modify them on the fly
+  const truckMarkersRef = useRef({});
+  const routeLinesRef = useRef({});
+
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [progresses, setProgresses] = useState({});
 
@@ -45,9 +53,7 @@ export default function TelemetryMap({ activeTrips, onCompleteTrip, simSpeed }) 
           const current = prev[trip.id] || 0;
           if (current >= 100) return;
 
-          // Simulation calculation:
-          // Distance delta = speed (km/h) * time delta (seconds) * simSpeed multiplier
-          // Speed is mocked around 75 km/h. Convert to km per second: 75 / 3600.
+          // mock speed 75 km/h. Convert to km per second: 75 / 3600.
           const kmsPerSec = 75 / 3600;
           const deltaDistance = kmsPerSec * 1.0 * simSpeed;
           const deltaProgress = (deltaDistance / trip.planned_distance) * 100;
@@ -55,7 +61,7 @@ export default function TelemetryMap({ activeTrips, onCompleteTrip, simSpeed }) 
           let newProgress = current + deltaProgress;
           if (newProgress >= 100) {
             newProgress = 100;
-            // Auto complete trip in background
+            // Trigger auto complete callback
             onCompleteTrip(trip.id, trip.planned_distance);
           }
           next[trip.id] = newProgress;
@@ -69,235 +75,220 @@ export default function TelemetryMap({ activeTrips, onCompleteTrip, simSpeed }) 
     return () => clearInterval(interval);
   }, [activeTrips, simSpeed, onCompleteTrip]);
 
-  // Canvas drawing loop
+  // Leaflet Map Initialization
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
+    if (!mapContainerRef.current || mapRef.current) return;
 
-    let pulseScale = 0;
+    // Centered at Nagpur/Central India with zoom 5
+    const mapInstance = L.map(mapContainerRef.current, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+    }).setView([20.5937, 78.9629], 5);
 
-    const draw = () => {
-      pulseScale = (pulseScale + 0.05) % (Math.PI * 2);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Premium light map tiles from CartoDB
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      maxZoom: 18,
+    }).addTo(mapInstance);
 
-      // Background grid lines
-      ctx.strokeStyle = 'rgba(230, 218, 203, 0.06)';
-      ctx.lineWidth = 1;
-      const gridSize = 30;
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+    // Render Hub markers
+    const hubIcon = L.divIcon({
+      html: `<div class="w-3.5 h-3.5 rounded-full bg-honey-gold border-2 border-hive-black shadow-md flex items-center justify-center"><div class="w-1.5 h-1.5 rounded-full bg-hive-black"></div></div>`,
+      className: 'custom-hub-marker',
+      iconSize: [14, 14],
+    });
+
+    Object.values(HUBS).forEach(hub => {
+      L.marker([hub.lat, hub.lng], { icon: hubIcon })
+        .bindPopup(`<strong class="text-hive-black font-bold">${hub.name}</strong>`)
+        .addTo(mapInstance);
+    });
+
+    mapRef.current = mapInstance;
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
       }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
-
-      // Draw route pathways (inactive nodes connection)
-      ctx.strokeStyle = 'rgba(107, 98, 89, 0.15)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      const hubList = Object.values(HUBS);
-      for (let i = 0; i < hubList.length; i++) {
-        for (let j = i + 1; j < hubList.length; j++) {
-          ctx.beginPath();
-          ctx.moveTo(hubList[i].x, hubList[i].y);
-          ctx.lineTo(hubList[j].x, hubList[j].y);
-          ctx.stroke();
-        }
-      }
-      ctx.setLineDash([]); // Reset line dash
-
-      // Draw Hubs (Nodes)
-      hubList.forEach(hub => {
-        // Glowing halo
-        ctx.fillStyle = 'rgba(245, 166, 35, 0.05)';
-        ctx.beginPath();
-        ctx.arc(hub.x, hub.y, 14, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Node center
-        ctx.fillStyle = '#C97A1A';
-        ctx.beginPath();
-        ctx.arc(hub.x, hub.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Label
-        ctx.fillStyle = 'rgba(31, 27, 22, 0.6)';
-        ctx.font = 'bold 8px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(hub.name, hub.x, hub.y - 8);
-      });
-
-      // Draw Dispatched Trips Routes and Moving Vehicles
-      activeTrips.forEach(trip => {
-        const start = getHubCoordinate(trip.source);
-        const end = getHubCoordinate(trip.destination);
-        const progress = progresses[trip.id] || 0;
-
-        // Draw active glowing path line
-        ctx.strokeStyle = '#F5A623';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.stroke();
-
-        // Calculate moving truck coordinate
-        const pct = progress / 100;
-        const tx = start.x + (end.x - start.x) * pct;
-        const ty = start.y + (end.y - start.y) * pct;
-
-        // Pulsing radar ring
-        const radRadius = 8 + Math.sin(pulseScale) * 8;
-        ctx.strokeStyle = `rgba(245, 166, 35, ${0.4 - Math.sin(pulseScale) * 0.3})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(tx, ty, radRadius, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Truck center circle
-        ctx.fillStyle = '#F5A623';
-        ctx.beginPath();
-        ctx.arc(tx, ty, 5.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Draw label with destination name and progress pct
-        ctx.fillStyle = '#1F1B16';
-        ctx.font = 'bold 7.5px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(progress)}%`, tx, ty - 9);
-      });
-
-      animationFrameId = requestAnimationFrame(draw);
     };
+  }, []);
 
-    draw();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [activeTrips, progresses]);
+  // Update Truck Positions & Paths
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
-  const handleCanvasClick = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    // Set of active trip IDs for cleanup
+    const activeIds = new Set(activeTrips.map(t => t.id));
 
-    // Detect if we clicked close to any vehicle
-    let found = null;
-    activeTrips.forEach(trip => {
-      const start = getHubCoordinate(trip.source);
-      const end = getHubCoordinate(trip.destination);
-      const progress = progresses[trip.id] || 0;
-      const pct = progress / 100;
-      const tx = start.x + (end.x - start.x) * pct;
-      const ty = start.y + (end.y - start.y) * pct;
-
-      const dist = Math.sqrt((clickX - tx) ** 2 + (clickY - ty) ** 2);
-      if (dist < 12) {
-        found = {
-          ...trip,
-          progress: Math.round(progress),
-          currentX: tx,
-          currentY: ty
-        };
+    // Cleanup ended trips
+    Object.keys(truckMarkersRef.current).forEach(id => {
+      if (!activeIds.has(id)) {
+        if (truckMarkersRef.current[id]) {
+          map.removeLayer(truckMarkersRef.current[id]);
+          delete truckMarkersRef.current[id];
+        }
+        if (routeLinesRef.current[id]) {
+          map.removeLayer(routeLinesRef.current[id]);
+          delete routeLinesRef.current[id];
+        }
       }
     });
 
-    setSelectedVehicle(found);
-  };
+    // Render/update active routes
+    activeTrips.forEach(trip => {
+      const sourceHub = getHubCoordinate(trip.source);
+      const destHub = getHubCoordinate(trip.destination);
+      const progress = progresses[trip.id] || 0;
+
+      // Current geographical coordinates
+      const currentLat = sourceHub.lat + (destHub.lat - sourceHub.lat) * (progress / 100);
+      const currentLng = sourceHub.lng + (destHub.lng - sourceHub.lng) * (progress / 100);
+
+      // Create Route Polyline if not already created
+      if (!routeLinesRef.current[trip.id]) {
+        routeLinesRef.current[trip.id] = L.polyline(
+          [[sourceHub.lat, sourceHub.lng], [destHub.lat, destHub.lng]],
+          { color: '#C97A1A', weight: 2.5, dashArray: '6, 6', opacity: 0.7 }
+        ).addTo(map);
+      }
+
+      // Create or update truck marker icon
+      const truckHtml = `
+        <div class="relative group cursor-pointer">
+          <div class="w-6 h-6 rounded-full bg-hive-black border border-honey-gold flex items-center justify-center shadow-lg hover:scale-110 transition-all">
+            <svg class="w-3.5 h-3.5 text-honey-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M20 16h-7M20 16v-5a1 1 0 00-1-1h-3v6" />
+            </svg>
+          </div>
+          <div class="absolute left-1/2 -translate-x-1/2 bottom-7 bg-hive-black text-white text-[9px] font-bold px-2 py-0.5 rounded shadow opacity-90 pointer-events-none whitespace-nowrap">
+            ${progress.toFixed(0)}%
+          </div>
+        </div>
+      `;
+
+      const truckIcon = L.divIcon({
+        html: truckHtml,
+        className: 'custom-truck-marker',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      if (!truckMarkersRef.current[trip.id]) {
+        const marker = L.marker([currentLat, currentLng], { icon: truckIcon })
+          .bindPopup(`
+            <div class="text-xs space-y-1">
+              <strong class="block text-hive-black text-sm">${trip.source} ➔ ${trip.destination}</strong>
+              <span class="block text-text-secondary">Progress: <strong>${progress.toFixed(1)}%</strong></span>
+              <span class="block text-text-secondary">Load Payload: <strong>${trip.cargo_weight} kg</strong></span>
+              <span class="block text-text-secondary">Distance Remaining: <strong>${((1 - progress / 100) * trip.planned_distance).toFixed(0)} km</strong></span>
+            </div>
+          `)
+          .addTo(map);
+
+        marker.on('click', () => {
+          setSelectedVehicle({
+            id: trip.id,
+            source: trip.source,
+            destination: trip.destination,
+            progress: progress,
+            planned_distance: trip.planned_distance,
+            cargo_weight: trip.cargo_weight,
+          });
+        });
+
+        truckMarkersRef.current[trip.id] = marker;
+      } else {
+        truckMarkersRef.current[trip.id].setLatLng([currentLat, currentLng]);
+        truckMarkersRef.current[trip.id].setIcon(truckIcon);
+        
+        // Update popup content dynamically if open
+        const popup = truckMarkersRef.current[trip.id].getPopup();
+        if (popup && popup.isOpen()) {
+          popup.setContent(`
+            <div class="text-xs space-y-1">
+              <strong class="block text-hive-black text-sm">${trip.source} ➔ ${trip.destination}</strong>
+              <span class="block text-text-secondary">Progress: <strong>${progress.toFixed(1)}%</strong></span>
+              <span class="block text-text-secondary">Load Payload: <strong>${trip.cargo_weight} kg</strong></span>
+              <span class="block text-text-secondary">Distance Remaining: <strong>${((1 - progress / 100) * trip.planned_distance).toFixed(0)} km</strong></span>
+            </div>
+          `);
+        }
+      }
+    });
+
+  }, [activeTrips, progresses]);
 
   return (
-    <div className="relative bg-bg-warm border border-honey-beige rounded-2xl overflow-hidden shadow-premium flex flex-col md:flex-row min-h-[350px]">
-      {/* Live Map Panel */}
-      <div className="flex-1 relative bg-white border-r border-honey-beige/40 flex items-center justify-center p-4">
-        <div className="absolute top-4 left-4 bg-hive-black/10 border border-honey-beige px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-success-green animate-ping" />
-          <span className="text-[10px] font-extrabold text-hive-black tracking-wider uppercase">Live GPS Radar</span>
+    <div className="bg-white rounded-2xl border border-honey-beige p-5 shadow-premium space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Truck className="w-5 h-5 text-honey-dark" />
+          <h2 className="text-sm font-extrabold text-hive-black uppercase tracking-wider">Live Route Map & GPS Simulation</h2>
         </div>
-
-        <canvas
-          ref={canvasRef}
-          width={500}
-          height={480}
-          onClick={handleCanvasClick}
-          className="max-w-full aspect-[500/480] bg-white cursor-pointer"
-        />
-
-        {/* Selected Vehicle Floating Info Card */}
-        {selectedVehicle && (
-          <div 
-            className="absolute bg-hive-black text-white p-3.5 rounded-xl shadow-xl z-20 text-[10px] space-y-2 border border-honey-gold/30 w-52 max-w-full animate-fade-in"
-            style={{
-              left: `${Math.min(selectedVehicle.currentX, 280)}px`,
-              top: `${Math.min(selectedVehicle.currentY + 20, 360)}px`
-            }}
-          >
-            <div className="flex justify-between items-center border-b border-honey-beige/10 pb-1.5">
-              <span className="font-extrabold uppercase text-honey-gold">Telemetry Stats</span>
-              <button onClick={() => setSelectedVehicle(null)} className="text-honey-beige hover:text-white cursor-pointer text-xs font-bold">×</button>
-            </div>
-            <div className="space-y-1">
-              <span className="block font-bold">Route: {selectedVehicle.source} ➔ {selectedVehicle.destination}</span>
-              <span className="block text-honey-beige/80">Distance: {selectedVehicle.planned_distance} km</span>
-              <span className="block text-honey-beige/80">Cargo Payload: {selectedVehicle.cargo_weight} kg</span>
-              <span className="block text-honey-beige/80">Est. Speed: 75 km/h</span>
-              <span className="block text-honey-beige/80">Completion: {selectedVehicle.progress}%</span>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-[10px] text-text-secondary font-semibold bg-bg-warm px-3 py-1 rounded-full border border-honey-beige">
+          <span className="w-1.5 h-1.5 rounded-full bg-honey-gold animate-ping"></span>
+          <span>{activeTrips.length} Active Shipments</span>
+        </div>
       </div>
 
-      {/* Telemetry Stream Sidebar */}
-      <div className="w-full md:w-64 bg-bg-warm/30 p-5 flex flex-col justify-between shrink-0">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 border-b border-honey-beige pb-2">
-            <Truck className="text-honey-dark w-4 h-4" />
-            <span className="font-extrabold text-[11px] text-hive-black uppercase tracking-wider">Active Fleet Stream</span>
-          </div>
-
-          <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-            {activeTrips.length === 0 ? (
-              <p className="text-[10px] text-text-secondary text-center py-8">
-                No active dispatched trips. Go to the <strong className="text-hive-black">Trips</strong> tab to dispatch a drafted route.
-              </p>
-            ) : (
-              activeTrips.map(trip => {
-                const prog = Math.round(progresses[trip.id] || 0);
-                return (
-                  <div key={trip.id} className="p-3 bg-white border border-honey-beige rounded-xl space-y-1.5 shadow-xs hover:border-honey-gold/40 transition-all">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-hive-black">
-                      <span className="truncate max-w-[100px]">{trip.source} ➔ {trip.destination}</span>
-                      <span className="text-honey-dark">{prog}%</span>
-                    </div>
-                    {/* Progress Bar */}
-                    <div className="w-full h-1.5 bg-honey-beige/30 rounded-full overflow-hidden">
-                      <div className="h-full bg-honey-gold rounded-full transition-all duration-300" style={{ width: `${prog}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[9px] text-text-secondary">
-                      <span>Dist: {trip.planned_distance}km</span>
-                      <span>Weight: {trip.cargo_weight}kg</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+        {/* Leaflet Map Area */}
+        <div className="lg:col-span-3 h-[420px] rounded-xl overflow-hidden border border-honey-beige shadow-inner relative z-10">
+          <div ref={mapContainerRef} className="w-full h-full" />
         </div>
 
-        {/* Sim Options Info */}
-        <div className="bg-white border border-honey-beige p-3 rounded-xl text-[9px] text-text-secondary space-y-1 mt-4">
-          <span className="block font-bold text-hive-black">Simulator Guide:</span>
-          <span className="block">Active trucks travel at ~75 km/h. Increase simulation multiplier to speed up route completion and witness database status synchronizations!</span>
+        {/* Selected vehicle sidebar */}
+        <div className="bg-bg-warm/50 border border-honey-beige p-4 rounded-xl space-y-4 flex flex-col justify-between">
+          <div>
+            <h3 className="text-[10px] font-extrabold text-honey-dark uppercase tracking-wider mb-3">Live Telemetry Feed</h3>
+            
+            {selectedVehicle ? (
+              <div className="space-y-3 text-xs">
+                <div className="p-2.5 bg-white border border-honey-beige rounded-lg">
+                  <span className="block text-[9px] font-extrabold text-text-secondary uppercase">Active Route</span>
+                  <span className="font-bold text-hive-black">{selectedVehicle.source} ➔ {selectedVehicle.destination}</span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-honey-beige rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Progress</span>
+                    <span className="font-bold text-hive-black">
+                      {(progresses[selectedVehicle.id] || selectedVehicle.progress).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-honey-beige/30 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-honey-gold h-full rounded-full transition-all" 
+                      style={{ width: `${progresses[selectedVehicle.id] || selectedVehicle.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-white border border-honey-beige rounded-lg grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <span className="block text-[8px] font-extrabold text-text-secondary uppercase">Payload</span>
+                    <span className="font-bold text-hive-black">{selectedVehicle.cargo_weight} kg</span>
+                  </div>
+                  <div>
+                    <span className="block text-[8px] font-extrabold text-text-secondary uppercase">Total Dist</span>
+                    <span className="font-bold text-hive-black">{selectedVehicle.planned_distance} km</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-text-secondary">
+                <MapPin className="w-8 h-8 text-honey-beige mx-auto mb-2" />
+                <p className="text-[11px] font-medium leading-relaxed">Click any active truck marker on the map to audit real-time telemetry.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="text-[9px] text-text-secondary italic text-center pt-3 border-t border-honey-beige/60">
+            Speed multiplier is currently synchronized to <strong className="text-hive-black">{simSpeed}x</strong>.
+          </div>
         </div>
       </div>
     </div>

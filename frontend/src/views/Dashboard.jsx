@@ -93,8 +93,8 @@ export default function Dashboard({ user }) {
   // 1. DRIVER DASHBOARD VIEW
   // ==========================================
   if (user.role === 'Driver') {
-    // Find active driver profile record
-    const driverRecord = drivers.find(d => d.name.toLowerCase().includes(user.name.toLowerCase()));
+    // Find active driver profile record by email, falling back to name includes
+    const driverRecord = drivers.find(d => d.email === user.email || d.name.toLowerCase().includes(user.name.toLowerCase()));
     
     // Filter trips for this driver
     const driverTrips = driverRecord ? trips.filter(t => t.driver_id === driverRecord.id) : [];

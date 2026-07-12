@@ -51,8 +51,7 @@ export default function Trips({ user }) {
 
       // If logged in as Driver, restrict trips to those assigned to "Dan Driver" (id or name match)
       if (isDriverRole) {
-        // Find Dan Driver id
-        const driverObj = dList.find(d => d.name.toLowerCase().includes('driver') || d.name.toLowerCase().includes(user.name.toLowerCase()));
+        const driverObj = dList.find(d => d.email === user.email || d.name.toLowerCase().includes(user.name.toLowerCase()));
         if (driverObj) {
           setTrips(tList.filter(t => t.driver_id === driverObj.id));
         } else {
