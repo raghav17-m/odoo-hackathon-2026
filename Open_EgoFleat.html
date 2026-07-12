@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=http://localhost:5173/" />
-  <title>Launch Ego Fleat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ego Fleat Launchpad</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -13,49 +13,137 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #FFFFFF;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(31,27,22,0.08);
+      border: 1px solid #F0DFC4;
+      max-width: 500px;
+      width: 100%;
       text-align: center;
     }
-    .container {
-      background: #FFFFFF;
-      padding: 30px;
-      border-radius: 16px;
-      box-shadow: 0 4px 20px rgba(31,27,22,0.06);
-      border: 1px solid #F0DFC4;
-      max-width: 400px;
-    }
-    h1 {
-      color: #C97A1A;
-      font-size: 24px;
-      margin-bottom: 10px;
-    }
-    p {
-      color: #6B6259;
-      font-size: 14px;
-      margin-bottom: 20px;
-    }
-    a {
-      display: inline-block;
+    .logo-container {
+      display: inline-flex;
       background-color: #F5A623;
       color: #1F1B16;
-      text-decoration: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-weight: bold;
-      transition: background-color 0.2s;
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 10px rgba(245,166,35,0.3);
     }
-    a:hover {
+    h1 {
+      color: #1F1B16;
+      font-size: 28px;
+      margin: 0 0 10px 0;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      color: #6B6259;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+    .links-grid {
+      display: grid;
+      grid-gap: 15px;
+      margin-bottom: 25px;
+    }
+    .btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #FFFFFF;
+      border: 1.5px solid #F0DFC4;
+      color: #1F1B16;
+      text-decoration: none;
+      padding: 16px 20px;
+      border-radius: 12px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .btn:hover {
+      border-color: #F5A623;
+      background-color: #FFFDF9;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(245,166,35,0.08);
+    }
+    .btn-title {
+      font-size: 15px;
+      color: #C97A1A;
+      margin-bottom: 4px;
+    }
+    .btn-desc {
+      font-size: 11px;
+      color: #6B6259;
+      font-weight: normal;
+    }
+    .tunnel-btn {
+      background-color: #F5A623;
+      border-color: #F5A623;
+    }
+    .tunnel-btn .btn-title {
+      color: #1F1B16;
+    }
+    .tunnel-btn .btn-desc {
+      color: #1F1B16;
+      opacity: 0.8;
+    }
+    .tunnel-btn:hover {
       background-color: #C97A1A;
+      border-color: #C97A1A;
+    }
+    .tunnel-btn:hover .btn-title {
       color: #FFFFFF;
+    }
+    .tunnel-btn:hover .btn-desc {
+      color: #FFFFFF;
+    }
+    .device-info {
+      font-size: 11px;
+      color: #6B6259;
+      border-top: 1px dashed #F0DFC4;
+      padding-top: 15px;
+      line-height: 1.5;
     }
   </style>
 </head>
 <body>
-  <div className="container">
-    <h1>Ego Fleat Portal</h1>
-    <p>Redirecting you to the active development portal at <strong>http://localhost:5173/</strong>...</p>
-    <a href="http://localhost:5173/">Click here if not redirected</a>
+  <div class="card">
+    <div class="logo-container">🚚</div>
+    <h1>Ego Fleat Launchpad</h1>
+    <p class="subtitle">Select a target server portal to view your active application workspace</p>
+    
+    <div class="links-grid">
+      <a href="http://localhost:5173/" class="btn" target="_blank">
+        <span class="btn-title">Vite Development Server</span>
+        <span class="btn-desc">Port 5173 - Hot reloading active client UI</span>
+      </a>
+      
+      <a href="http://localhost:5000/" class="btn" target="_blank">
+        <span class="btn-title">Unified Express Backend</span>
+        <span class="btn-desc">Port 5000 - SQLite database + static build files</span>
+      </a>
+
+      <a href="https://some-meals-carry.loca.lt" class="btn tunnel-btn" target="_blank">
+        <span class="btn-title">🌍 Secure Web Tunnel</span>
+        <span class="btn-desc">Access on Mobile Devices, iPads or External Friends</span>
+      </a>
+    </div>
+
+    <div class="device-info">
+      <strong>Mobile Access Tips:</strong> Ensure the local servers are running on your computer. When opening the secure web tunnel, click "Bypass" or "Continue" if prompted by the Localtunnel security warning.
+    </div>
   </div>
 </body>
 </html>
