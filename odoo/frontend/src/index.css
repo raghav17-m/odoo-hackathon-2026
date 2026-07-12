@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --color-honey-gold: #F5A623;
+  --color-honey-dark: #C97A1A;
+  --color-hive-black: #1F1B16;
+  --color-bg-warm: #FFFDF9;
+  --color-surface: #FFFFFF;
+  --color-honey-beige: #F0DFC4;
+  --color-success-green: #2E9E5B;
+  --color-warning-orange: #E8A93B;
+  --color-danger-red: #D64545;
+  --color-text-primary: #1F1B16;
+  --color-text-secondary: #6B6259;
+
+  --shadow-premium: 0 4px 20px rgba(31, 27, 22, 0.06);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg-warm);
+    color: var(--color-text-primary);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Premium scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg-warm);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-honey-beige);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-honey-gold);
+  }
+}
+
+/* Honeycomb motif styles */
+.honeycomb-pattern {
+  background-color: var(--color-bg-warm);
+  background-image: 
+    radial-gradient(circle at 100% 150%, var(--color-honey-beige) 24%, white 24%, white 28%, var(--color-honey-beige) 28%, var(--color-honey-beige) 36%, transparent 36%, transparent),
+    radial-gradient(circle at 0% 150%, var(--color-honey-beige) 24%, white 24%, white 28%, var(--color-honey-beige) 28%, var(--color-honey-beige) 36%, transparent 36%, transparent),
+    radial-gradient(circle at 50%  100%, white 4%, var(--color-honey-beige) 4%, var(--color-honey-beige) 18%, white 18%, white 22%, var(--color-honey-beige) 22%, var(--color-honey-beige) 30%, transparent 30%, transparent),
+    radial-gradient(circle at 100% 50%, white 4%, var(--color-honey-beige) 4%, var(--color-honey-beige) 18%, white 18%, white 22%, var(--color-honey-beige) 22%, var(--color-honey-beige) 30%, transparent 30%, transparent),
+    radial-gradient(circle at 0% 50%, white 4%, var(--color-honey-beige) 4%, var(--color-honey-beige) 18%, white 18%, white 22%, var(--color-honey-beige) 22%, var(--color-honey-beige) 30%, transparent 30%, transparent);
+  background-size: 40px 70px;
+  opacity: 0.15;
+}
+
+/* Hexagonal pill/badge shape (sparingly used) */
+.hex-badge {
+  clip-path: polygon(90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%, 10% 0);
+}
