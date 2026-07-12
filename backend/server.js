@@ -505,7 +505,7 @@ app.post('/api/trips/:id/dispatch', authenticateToken, async (req, res) => {
       if (!trip) throw new Error('Trip not found.');
 
       if (trip.status !== 'Draft') {
-        throw new Error('Only Draft trips can be dispatched.');
+        throw new Error('Only Draft trips can be assigned.');
       }
 
       const vehicle = await tx.vehicle.findUnique({ where: { id: trip.vehicle_id } });
@@ -515,11 +515,57 @@ app.post('/api/trips/:id/dispatch', authenticateToken, async (req, res) => {
         throw new Error('Vehicle or Driver assigned to trip no longer exists.');
       }
 
-      if (vehicle.status === 'OnTrip') throw new Error('Vehicle is already OnTrip.');
-      if (driver.status === 'OnTrip') throw new Error('Driver is already OnTrip.');
-      if (['Retired', 'InShop'].includes(vehicle.status)) throw new Error('Vehicle is not available.');
-      if (driver.status === 'Suspended' || new Date(driver.license_expiry_date) < new Date()) {
-        throw new Error('Driver is ineligible (expired or suspended).');
+      if (vehicle.status !== 'Available') throw new Error(`Vehicle is not Available (currently ${vehicle.status}).`);
+      if (driver.status !== 'Available') throw new Error(`Driver is not Available (currently ${driver.status}).`);
+      if (new Date(driver.license_expiry_date) < new Date()) {
+        throw new Error('Driver license is expired.');
+      }
+
+      const updated = await tx.trip.update({
+        where: { id },
+        data: {
+          status: 'Assigned',
+        },
+      });
+
+      await tx.vehicle.update({
+        where: { id: trip.vehicle_id },
+        data: { status: 'Reserved' },
+      });
+
+      await tx.driver.update({
+        where: { id: trip.driver_id },
+        data: { status: 'Reserved' },
+      });
+
+      await logAudit(tx, req.user, 'ASSIGN_TRIP', 'Trip', id);
+      return updated;
+    });
+
+    res.json(updatedTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: err.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips/:id/accept', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id } });
+      if (!trip) throw new Error('Trip not found.');
+
+      if (trip.status !== 'Assigned') {
+        throw new Error('Only Assigned trips can be accepted.');
+      }
+
+      const driver = await tx.driver.findUnique({ where: { id: trip.driver_id } });
+      if (!driver) throw new Error('Driver assigned to trip no longer exists.');
+
+      if (req.user.role === 'Driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
+        throw new Error('You are not authorized to accept this trip.');
       }
 
       const updated = await tx.trip.update({
@@ -540,7 +586,54 @@ app.post('/api/trips/:id/dispatch', authenticateToken, async (req, res) => {
         data: { status: 'OnTrip' },
       });
 
-      await logAudit(tx, req.user, 'DISPATCH_TRIP', 'Trip', id);
+      await logAudit(tx, req.user, 'ACCEPT_TRIP', 'Trip', id);
+      return updated;
+    });
+
+    res.json(updatedTrip);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: err.message || 'Internal server error.' });
+  }
+});
+
+app.post('/api/trips/:id/decline', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id } });
+      if (!trip) throw new Error('Trip not found.');
+
+      if (trip.status !== 'Assigned') {
+        throw new Error('Only Assigned trips can be declined.');
+      }
+
+      const driver = await tx.driver.findUnique({ where: { id: trip.driver_id } });
+      if (!driver) throw new Error('Driver assigned to trip no longer exists.');
+
+      if (req.user.role === 'Driver' && !driver.name.toLowerCase().includes(req.user.name.toLowerCase())) {
+        throw new Error('You are not authorized to decline this trip.');
+      }
+
+      const updated = await tx.trip.update({
+        where: { id },
+        data: {
+          status: 'Draft',
+        },
+      });
+
+      await tx.vehicle.update({
+        where: { id: trip.vehicle_id },
+        data: { status: 'Available' },
+      });
+
+      await tx.driver.update({
+        where: { id: trip.driver_id },
+        data: { status: 'Available' },
+      });
+
+      await logAudit(tx, req.user, 'DECLINE_TRIP', 'Trip', id);
       return updated;
     });
 
@@ -633,8 +726,8 @@ app.post('/api/trips/:id/cancel', authenticateToken, async (req, res) => {
       if (!trip) throw new Error('Trip not found.');
 
       const originalStatus = trip.status;
-      if (!['Draft', 'Dispatched'].includes(originalStatus)) {
-        throw new Error('Only Draft or Dispatched trips can be cancelled.');
+      if (!['Draft', 'Assigned', 'Dispatched'].includes(originalStatus)) {
+        throw new Error('Only Draft, Assigned, or Dispatched trips can be cancelled.');
       }
 
       const updated = await tx.trip.update({
@@ -642,7 +735,7 @@ app.post('/api/trips/:id/cancel', authenticateToken, async (req, res) => {
         data: { status: 'Cancelled' },
       });
 
-      if (originalStatus === 'Dispatched') {
+      if (['Assigned', 'Dispatched'].includes(originalStatus)) {
         await tx.vehicle.update({
           where: { id: trip.vehicle_id },
           data: { status: 'Available' },

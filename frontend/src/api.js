@@ -173,6 +173,16 @@ export const api = {
         method: 'POST',
       });
     },
+    accept: async (id) => {
+      return request(`/trips/${id}/accept`, {
+        method: 'POST',
+      });
+    },
+    decline: async (id) => {
+      return request(`/trips/${id}/decline`, {
+        method: 'POST',
+      });
+    },
     complete: async (id, completionData) => {
       return request(`/trips/${id}/complete`, {
         method: 'POST',

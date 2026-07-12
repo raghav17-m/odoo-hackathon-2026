@@ -149,9 +149,30 @@ export default function Trips({ user }) {
   };
 
   const handleDispatch = async (tripId) => {
-    if (!window.confirm('Dispatch this trip now? Both vehicle and driver statuses will change to OnTrip.')) return;
+    if (!window.confirm('Dispatch this trip draft now? The driver will be notified and both vehicle and driver statuses will change to Reserved.')) return;
     try {
       await api.trips.dispatch(tripId);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleAccept = async (tripId) => {
+    if (!window.confirm('Accept this assigned trip? You and the vehicle will transition to active duty.')) return;
+    try {
+      await api.trips.accept(tripId);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDecline = async (tripId) => {
+    const reason = window.prompt('Provide a reason for declining this trip:');
+    if (reason === null) return;
+    try {
+      await api.trips.decline(tripId);
       loadData();
     } catch (err) {
       alert(err.message);
@@ -195,6 +216,9 @@ export default function Trips({ user }) {
     switch (status) {
       case 'Draft':
         classes = 'bg-gray-100 text-text-secondary border-gray-200';
+        break;
+      case 'Assigned':
+        classes = 'bg-warning-orange/15 text-warning-orange border-warning-orange/20';
         break;
       case 'Dispatched':
         classes = 'bg-honey-gold/15 text-honey-dark border-honey-gold/20';
@@ -256,6 +280,12 @@ export default function Trips({ user }) {
           className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${statusFilter === 'Draft' ? 'bg-honey-gold text-hive-black' : 'hover:bg-bg-warm text-text-secondary'}`}
         >
           Drafts
+        </button>
+        <button
+          onClick={() => setStatusFilter('Assigned')}
+          className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${statusFilter === 'Assigned' ? 'bg-honey-gold text-hive-black' : 'hover:bg-bg-warm text-text-secondary'}`}
+        >
+          Assigned
         </button>
         <button
           onClick={() => setStatusFilter('Dispatched')}
@@ -333,6 +363,27 @@ export default function Trips({ user }) {
                       <td className="p-4">{getStatusBadge(t.status)}</td>
                       <td className="p-4 text-right space-x-2">
                         {/* Driver Operations */}
+                        {isDriverRole && t.status === 'Assigned' && (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleAccept(t.id)}
+                              className="flex items-center gap-1 bg-success-green hover:bg-success-green/90 text-white font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition-all cursor-pointer"
+                              title="Accept Shift"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Accept</span>
+                            </button>
+                            <button
+                              onClick={() => handleDecline(t.id)}
+                              className="flex items-center gap-1 bg-white hover:bg-danger-red/10 border border-danger-red/20 text-danger-red font-semibold px-2.5 py-1.5 rounded-lg text-[10px] transition-all cursor-pointer"
+                              title="Decline Shift"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>Decline</span>
+                            </button>
+                          </div>
+                        )}
+
                         {isDriverRole && t.status === 'Dispatched' && (
                           <button
                             onClick={() => handleOpenCompleteModal(t.id)}
@@ -356,6 +407,12 @@ export default function Trips({ user }) {
                                 <span>Dispatch</span>
                               </button>
                             )}
+                            {t.status === 'Assigned' && (
+                              <span className="text-[10px] text-text-secondary/60 font-semibold italic flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-warning-orange shrink-0" />
+                                Pending Acceptance
+                              </span>
+                            )}
                             {t.status === 'Dispatched' && (
                               <button
                                 onClick={() => handleOpenCompleteModal(t.id)}
@@ -366,7 +423,7 @@ export default function Trips({ user }) {
                                 <span>Complete</span>
                               </button>
                             )}
-                            {['Draft', 'Dispatched'].includes(t.status) && (
+                            {['Draft', 'Assigned', 'Dispatched'].includes(t.status) && (
                               <button
                                 onClick={() => handleCancel(t.id)}
                                 className="flex items-center gap-1 bg-white hover:bg-danger-red/10 border border-danger-red/20 text-danger-red font-semibold px-2 py-1 rounded-lg text-[10px] transition-all cursor-pointer"
