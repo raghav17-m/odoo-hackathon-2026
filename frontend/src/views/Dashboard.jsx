@@ -211,7 +211,7 @@ export default function Dashboard({ user }) {
           <Truck className="w-12 h-12 text-honey-gold mx-auto stroke-1" />
           <h3 className="text-lg font-bold text-hive-black">No Fleet Assets Registered</h3>
           <p className="text-text-secondary text-sm max-w-md mx-auto">
-            TransitOps is currently empty. Switch to a <strong>Fleet Manager</strong> role to start registering vehicles and drivers.
+            EcoFleet is currently empty. Switch to a <strong>Fleet Manager</strong> role to start registering vehicles and drivers.
           </p>
         </div>
       )}

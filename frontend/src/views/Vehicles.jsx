@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Plus, Search, Edit2, Trash2, X, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, AlertCircle, History } from 'lucide-react';
 
 export default function Vehicles({ user }) {
   const [vehicles, setVehicles] = useState([]);
@@ -8,6 +8,11 @@ export default function Vehicles({ user }) {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('registration_number');
+
+  // History State
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   // Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,6 +35,17 @@ export default function Vehicles({ user }) {
     try {
       const data = await api.vehicles.list();
       setVehicles(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenHistory = async (vehicle) => {
+    try {
+      setHistoryTarget(vehicle);
+      const data = await api.audit.list('Vehicle', vehicle.id);
+      setHistoryLogs(data || []);
+      setIsHistoryOpen(true);
     } catch (err) {
       console.error(err);
     }
@@ -136,6 +152,27 @@ export default function Vehicles({ user }) {
     return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${classes}`}>{status}</span>;
   };
 
+  const getRiskBadge = (risk) => {
+    let classes = '';
+    switch (risk) {
+      case 'Low':
+        classes = 'bg-success-green/10 text-success-green border-success-green/20';
+        break;
+      case 'Medium':
+        classes = 'bg-warning-orange/10 text-warning-orange border-warning-orange/20';
+        break;
+      case 'High':
+        classes = 'bg-danger-red/10 text-danger-red border-danger-red/20';
+        break;
+      case 'Retired':
+        classes = 'bg-gray-100 text-gray-400 border-gray-200';
+        break;
+      default:
+        classes = 'bg-gray-100 text-gray-500 border-gray-200';
+    }
+    return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${classes}`}>{risk} Risk</span>;
+  };
+
   return (
     <div className="space-y-6">
       {/* View Header */}
@@ -210,13 +247,14 @@ export default function Vehicles({ user }) {
                 <th className="p-4 cursor-pointer hover:text-honey-dark" onClick={() => setSortBy('acquisition_cost')}>Acquisition Cost</th>
                 <th className="p-4">Region</th>
                 <th className="p-4">Status</th>
-                {!isReadOnly && <th className="p-4 text-right">Actions</th>}
+                <th className="p-4">Maintenance Risk</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-honey-beige">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 8 : 9} className="p-8 text-center text-text-secondary">
+                  <td colSpan={10} className="p-8 text-center text-text-secondary">
                     No vehicles found matching filters.
                   </td>
                 </tr>
@@ -231,24 +269,34 @@ export default function Vehicles({ user }) {
                     <td className="p-4 font-medium">₹{v.acquisition_cost.toLocaleString()}</td>
                     <td className="p-4 text-text-secondary">{v.region}</td>
                     <td className="p-4">{getStatusBadge(v.status)}</td>
-                    {!isReadOnly && (
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleOpenEditModal(v)}
-                          className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
-                          title="Edit Vehicle"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(v.id)}
-                          className="p-1 hover:text-danger-red text-text-secondary rounded transition-colors inline-block cursor-pointer"
-                          title="Delete Vehicle"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    )}
+                    <td className="p-4">{getRiskBadge(v.maintenance_risk)}</td>
+                    <td className="p-4 text-right space-x-2">
+                      {!isReadOnly && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(v)}
+                            className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                            title="Edit Vehicle"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(v.id)}
+                            className="p-1 hover:text-danger-red text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                            title="Delete Vehicle"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => handleOpenHistory(v)}
+                        className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                        title="View History / Audit Log"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -408,6 +456,57 @@ export default function Vehicles({ user }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* History/Audit Log Modal */}
+      {isHistoryOpen && historyTarget && (
+        <div className="fixed inset-0 bg-hive-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white w-full max-w-lg rounded-2xl border border-honey-beige shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-honey-beige flex items-center justify-between bg-bg-warm">
+              <div>
+                <h3 className="font-extrabold text-lg text-hive-black">Configuration History</h3>
+                <p className="text-text-secondary text-[11px]">Audit trail for {historyTarget.registration_number.toUpperCase()}</p>
+              </div>
+              <button onClick={() => setIsHistoryOpen(false)} className="text-text-secondary hover:text-hive-black transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              {historyLogs.length === 0 ? (
+                <p className="text-center text-text-secondary py-8">No historical actions logged for this asset.</p>
+              ) : (
+                <div className="relative border-l-2 border-honey-beige pl-4 space-y-5 py-2">
+                  {historyLogs.map((log) => (
+                    <div key={log.id} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-honey-gold border border-white" />
+                      <div className="bg-bg-warm/60 p-3 rounded-xl border border-honey-beige/50">
+                        <span className="block font-bold text-hive-black uppercase tracking-wider text-[10px]">
+                          {log.action.replace(/_/g, ' ')}
+                        </span>
+                        <span className="block text-text-secondary text-[10px] mt-0.5">
+                          By: <strong className="text-hive-black">{log.user_id}</strong>
+                        </span>
+                        <span className="block text-text-secondary/60 text-[9px] mt-1">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-bg-warm border-t border-honey-beige flex justify-end">
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="px-4 py-2 bg-hive-black text-white rounded-lg font-bold text-xs cursor-pointer hover:bg-hive-black/90"
+              >
+                Close Logs
+              </button>
+            </div>
           </div>
         </div>
       )}

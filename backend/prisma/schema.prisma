@@ -95,3 +95,12 @@ model Expense {
   amount     Float
   date       String
 }
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String
+  action      String
+  entity_type String
+  entity_id   String
+  timestamp   DateTime @default(now())
+}

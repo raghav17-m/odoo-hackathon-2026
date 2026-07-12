@@ -1,4 +1,4 @@
-// TransitOps API Integration Layer
+// EcoFleet API Integration Layer
 // Connects the frontend client to the Express/SQLite REST backend.
 // Implements safe storage logic to fallback gracefully when localStorage is blocked.
 
@@ -7,7 +7,7 @@ const BASE_URL = window.location.origin.includes('localhost:5173')
   : '/api';
 
 const DB_KEYS = {
-  CURRENT_USER: 'transitops_current_user',
+  CURRENT_USER: 'ecofleet_current_user',
 };
 
 // Safe storage wrapper to prevent crashes in sandbox/iframe preview environments
@@ -183,6 +183,9 @@ export const api = {
       return request(`/trips/${id}/cancel`, {
         method: 'POST',
       });
+    },
+    matchSuggestions: async (cargoWeight) => {
+      return request(`/trips/match-suggestions?cargo_weight=${cargoWeight}`);
     }
   },
 
@@ -227,6 +230,20 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(expenseData),
       });
+    }
+  },
+
+  // --- COMPLIANCE ---
+  compliance: {
+    alerts: async () => {
+      return request('/compliance/alerts');
+    }
+  },
+
+  // --- AUDIT TRAIL ---
+  audit: {
+    list: async (type = '', id = '') => {
+      return request(`/audit-logs?entity_type=${type}&entity_id=${id}`);
     }
   }
 };

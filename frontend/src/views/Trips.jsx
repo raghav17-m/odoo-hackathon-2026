@@ -15,6 +15,10 @@ export default function Trips({ user }) {
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [selectedTripId, setSelectedTripId] = useState(null);
 
+  // Match Suggestions State
+  const [matchSuggestions, setMatchSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
   // Form States
   const [createFormData, setCreateFormData] = useState({
     source: '',
@@ -66,6 +70,49 @@ export default function Trips({ user }) {
     loadData();
   }, [user]);
 
+  // Debounced fetch of match suggestions when cargo weight changes
+  useEffect(() => {
+    const weightNum = Number(createFormData.cargo_weight);
+    if (!isCreateModalOpen || isNaN(weightNum) || weightNum <= 0) {
+      setMatchSuggestions(null);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      setLoadingSuggestions(true);
+      try {
+        const data = await api.trips.matchSuggestions(weightNum);
+        setMatchSuggestions(data);
+        
+        // Auto-select top recommendation if none is selected or current selection is invalid
+        if (data.vehicles?.length > 0) {
+          const isCurrentVehicleValid = data.vehicles.some(v => v.id === createFormData.vehicle_id);
+          if (!createFormData.vehicle_id || !isCurrentVehicleValid) {
+            setCreateFormData(prev => ({ ...prev, vehicle_id: data.vehicles[0].id }));
+          }
+        } else {
+          setCreateFormData(prev => ({ ...prev, vehicle_id: '' }));
+        }
+
+        if (data.drivers?.length > 0) {
+          const isCurrentDriverValid = data.drivers.some(d => d.id === createFormData.driver_id);
+          if (!createFormData.driver_id || !isCurrentDriverValid) {
+            setCreateFormData(prev => ({ ...prev, driver_id: data.drivers[0].id }));
+          }
+        } else {
+          setCreateFormData(prev => ({ ...prev, driver_id: '' }));
+        }
+      } catch (err) {
+        console.error('Failed to load match suggestions:', err);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 450);
+    return () => clearTimeout(timer);
+  }, [createFormData.cargo_weight, isCreateModalOpen]);
+
   // Filter available vehicles and drivers for trip assignment
   const eligibleVehicles = vehicles.filter(v => v.status === 'Available');
   const eligibleDrivers = drivers.filter(d => {
@@ -77,6 +124,7 @@ export default function Trips({ user }) {
 
   const handleOpenCreateModal = () => {
     setError('');
+    setMatchSuggestions(null);
     setCreateFormData({
       source: '',
       destination: '',
@@ -388,7 +436,26 @@ export default function Trips({ user }) {
 
               <div>
                 <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Assign Vehicle *</label>
-                {eligibleVehicles.length === 0 ? (
+                {matchSuggestions ? (
+                  matchSuggestions.vehicles.length === 0 ? (
+                    <div className="p-3 bg-danger-red/10 border border-danger-red/20 rounded-lg text-danger-red font-semibold">
+                      No vehicles are large enough to carry this payload weight ({createFormData.cargo_weight}kg).
+                    </div>
+                  ) : (
+                    <select
+                      value={createFormData.vehicle_id}
+                      onChange={(e) => setCreateFormData({ ...createFormData, vehicle_id: e.target.value })}
+                      className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold font-semibold text-hive-black border-l-3 border-honey-gold"
+                      required
+                    >
+                      {matchSuggestions.vehicles.map((v, index) => (
+                        <option key={v.id} value={v.id}>
+                          {index === 0 ? '🏆 [Optimal Fit] ' : ''}{v.registration_number.toUpperCase()} - {v.name_model} (Cap: {v.max_load_capacity}kg, Risk: {v.maintenance_risk})
+                        </option>
+                      ))}
+                    </select>
+                  )
+                ) : eligibleVehicles.length === 0 ? (
                   <div className="p-3 bg-warning-orange/10 border border-warning-orange/20 rounded-lg text-warning-orange font-semibold">
                     No available vehicles in fleet. Open maintenance tasks or wait for trip completions.
                   </div>
@@ -401,7 +468,7 @@ export default function Trips({ user }) {
                   >
                     {eligibleVehicles.map(v => (
                       <option key={v.id} value={v.id}>
-                        {v.registration_number} - {v.name_model} (Max Cap: {v.max_load_capacity}kg)
+                        {v.registration_number.toUpperCase()} - {v.name_model} (Max Cap: {v.max_load_capacity}kg)
                       </option>
                     ))}
                   </select>
@@ -410,7 +477,26 @@ export default function Trips({ user }) {
 
               <div>
                 <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Assign Eligible Driver *</label>
-                {eligibleDrivers.length === 0 ? (
+                {matchSuggestions ? (
+                  matchSuggestions.drivers.length === 0 ? (
+                    <div className="p-3 bg-danger-red/10 border border-danger-red/20 rounded-lg text-danger-red font-semibold">
+                      No drivers are currently available for assignment.
+                    </div>
+                  ) : (
+                    <select
+                      value={createFormData.driver_id}
+                      onChange={(e) => setCreateFormData({ ...createFormData, driver_id: e.target.value })}
+                      className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold font-semibold text-hive-black border-l-3 border-honey-gold"
+                      required
+                    >
+                      {matchSuggestions.drivers.map((d, index) => (
+                        <option key={d.id} value={d.id}>
+                          {index === 0 ? '⭐ [Best Safety Score] ' : ''}{d.name} (Score: {d.safety_score}/100)
+                        </option>
+                      ))}
+                    </select>
+                  )
+                ) : eligibleDrivers.length === 0 ? (
                   <div className="p-3 bg-warning-orange/10 border border-warning-orange/20 rounded-lg text-warning-orange font-semibold">
                     No eligible drivers are currently available. Check status and license expiries.
                   </div>

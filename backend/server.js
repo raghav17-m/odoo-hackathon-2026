@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'transitops-super-secure-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'ecofleet-super-secure-key-2026';
 
 app.use(cors());
 app.use(express.json());
@@ -36,6 +36,23 @@ function authenticateToken(req, res, next) {
     req.user = user;
     next();
   });
+}
+
+// Helper to log audit trails inside Prisma transactions
+async function logAudit(tx, user, action, entityType, entityId) {
+  try {
+    const userIdentifier = user ? (user.name || user.email) : 'system';
+    await tx.auditLog.create({
+      data: {
+        user_id: userIdentifier,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to write audit log:', err);
+  }
 }
 
 // --- AUTHENTICATION ---
@@ -126,9 +143,38 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/vehicles', authenticateToken, async (req, res) => {
   try {
     const vehicles = await prisma.vehicle.findMany({
+      include: {
+        maintenanceLogs: true,
+      },
       orderBy: { registration_number: 'asc' },
     });
-    res.json(vehicles);
+
+    const enrichedVehicles = vehicles.map(v => {
+      let risk = 'Low';
+      const closedLogs = v.maintenanceLogs.filter(log => log.status === 'Closed');
+
+      const lastServiceDate = closedLogs.length > 0
+        ? new Date(Math.max(...closedLogs.map(l => new Date(l.closed_at || l.created_at))))
+        : new Date(v.created_at);
+
+      const daysSinceLastService = (new Date() - lastServiceDate) / (1000 * 60 * 60 * 24);
+
+      if (v.status === 'Retired') {
+        risk = 'Retired';
+      } else if (v.odometer > 35000 || daysSinceLastService > 90) {
+        risk = 'High';
+      } else if (v.odometer > 20000 || daysSinceLastService > 60) {
+        risk = 'Medium';
+      }
+
+      const { maintenanceLogs, ...vehicleData } = v;
+      return {
+        ...vehicleData,
+        maintenance_risk: risk,
+      };
+    });
+
+    res.json(enrichedVehicles);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error.' });
@@ -151,23 +197,28 @@ app.post('/api/vehicles', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: `Vehicle registration number "${registration_number}" already exists.` });
     }
 
-    const newVehicle = await prisma.vehicle.create({
-      data: {
-        registration_number: registration_number.toLowerCase(),
-        name_model,
-        type,
-        max_load_capacity: Number(max_load_capacity),
-        odometer: Number(odometer),
-        acquisition_cost: Number(acquisition_cost),
-        region,
-        status: status || 'Available',
-      },
+    const newVehicle = await prisma.$transaction(async (tx) => {
+      const vehicle = await tx.vehicle.create({
+        data: {
+          registration_number: registration_number.toLowerCase(),
+          name_model,
+          type,
+          max_load_capacity: Number(max_load_capacity),
+          odometer: Number(odometer),
+          acquisition_cost: Number(acquisition_cost),
+          region,
+          status: status || 'Available',
+        },
+      });
+
+      await logAudit(tx, req.user, 'CREATE_VEHICLE', 'Vehicle', vehicle.id);
+      return vehicle;
     });
 
     res.status(201).json(newVehicle);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -194,24 +245,29 @@ app.put('/api/vehicles/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const updatedVehicle = await prisma.vehicle.update({
-      where: { id },
-      data: {
-        registration_number: registration_number ? registration_number.toLowerCase() : undefined,
-        name_model,
-        type,
-        max_load_capacity: max_load_capacity !== undefined ? Number(max_load_capacity) : undefined,
-        odometer: odometer !== undefined ? Number(odometer) : undefined,
-        acquisition_cost: acquisition_cost !== undefined ? Number(acquisition_cost) : undefined,
-        region,
-        status,
-      },
+    const updatedVehicle = await prisma.$transaction(async (tx) => {
+      const updated = await tx.vehicle.update({
+        where: { id },
+        data: {
+          registration_number: registration_number ? registration_number.toLowerCase() : undefined,
+          name_model,
+          type,
+          max_load_capacity: max_load_capacity !== undefined ? Number(max_load_capacity) : undefined,
+          odometer: odometer !== undefined ? Number(odometer) : undefined,
+          acquisition_cost: acquisition_cost !== undefined ? Number(acquisition_cost) : undefined,
+          region,
+          status,
+        },
+      });
+
+      await logAudit(tx, req.user, 'UPDATE_VEHICLE', 'Vehicle', id);
+      return updated;
     });
 
     res.json(updatedVehicle);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -227,11 +283,15 @@ app.delete('/api/vehicles/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Cannot delete vehicle. It is referenced in existing trips.' });
     }
 
-    await prisma.vehicle.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.vehicle.delete({ where: { id } });
+      await logAudit(tx, req.user, 'DELETE_VEHICLE', 'Vehicle', id);
+    });
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -264,22 +324,27 @@ app.post('/api/drivers', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: `License number "${license_number}" is already registered.` });
     }
 
-    const newDriver = await prisma.driver.create({
-      data: {
-        name,
-        license_number: license_number.toLowerCase(),
-        license_category,
-        license_expiry_date,
-        contact_number,
-        safety_score: safety_score !== undefined ? Number(safety_score) : 100,
-        status: status || 'Available',
-      },
+    const newDriver = await prisma.$transaction(async (tx) => {
+      const driver = await tx.driver.create({
+        data: {
+          name,
+          license_number: license_number.toLowerCase(),
+          license_category,
+          license_expiry_date,
+          contact_number,
+          safety_score: safety_score !== undefined ? Number(safety_score) : 100,
+          status: status || 'Available',
+        },
+      });
+
+      await logAudit(tx, req.user, 'CREATE_DRIVER', 'Driver', driver.id);
+      return driver;
     });
 
     res.status(201).json(newDriver);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -306,23 +371,28 @@ app.put('/api/drivers/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const updatedDriver = await prisma.driver.update({
-      where: { id },
-      data: {
-        name,
-        license_number: license_number ? license_number.toLowerCase() : undefined,
-        license_category,
-        license_expiry_date,
-        contact_number,
-        safety_score: safety_score !== undefined ? Number(safety_score) : undefined,
-        status,
-      },
+    const updatedDriver = await prisma.$transaction(async (tx) => {
+      const updated = await tx.driver.update({
+        where: { id },
+        data: {
+          name,
+          license_number: license_number ? license_number.toLowerCase() : undefined,
+          license_category,
+          license_expiry_date,
+          contact_number,
+          safety_score: safety_score !== undefined ? Number(safety_score) : undefined,
+          status,
+        },
+      });
+
+      await logAudit(tx, req.user, 'UPDATE_DRIVER', 'Driver', id);
+      return updated;
     });
 
     res.json(updatedDriver);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -338,11 +408,15 @@ app.delete('/api/drivers/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Cannot delete driver. They are referenced in existing trips.' });
     }
 
-    await prisma.driver.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.driver.delete({ where: { id } });
+      await logAudit(tx, req.user, 'DELETE_DRIVER', 'Driver', id);
+    });
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -398,22 +472,27 @@ app.post('/api/trips', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: `${cargoWeightNum}kg exceeds ${vehicle.registration_number}'s ${vehicle.max_load_capacity}kg capacity.` });
     }
 
-    const newTrip = await prisma.trip.create({
-      data: {
-        vehicle_id,
-        driver_id,
-        source,
-        destination,
-        cargo_weight: cargoWeightNum,
-        planned_distance: Number(planned_distance),
-        status: 'Draft',
-      },
+    const newTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.create({
+        data: {
+          vehicle_id,
+          driver_id,
+          source,
+          destination,
+          cargo_weight: cargoWeightNum,
+          planned_distance: Number(planned_distance),
+          status: 'Draft',
+        },
+      });
+
+      await logAudit(tx, req.user, 'CREATE_TRIP_DRAFT', 'Trip', trip.id);
+      return trip;
     });
 
     res.status(201).json(newTrip);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -421,50 +500,54 @@ app.post('/api/trips/:id/dispatch', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const trip = await prisma.trip.findUnique({ where: { id } });
-    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id } });
+      if (!trip) throw new Error('Trip not found.');
 
-    if (trip.status !== 'Draft') {
-      return res.status(400).json({ message: 'Only Draft trips can be dispatched.' });
-    }
+      if (trip.status !== 'Draft') {
+        throw new Error('Only Draft trips can be dispatched.');
+      }
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: trip.vehicle_id } });
-    const driver = await prisma.driver.findUnique({ where: { id: trip.driver_id } });
+      const vehicle = await tx.vehicle.findUnique({ where: { id: trip.vehicle_id } });
+      const driver = await tx.driver.findUnique({ where: { id: trip.driver_id } });
 
-    if (!vehicle || !driver) {
-      return res.status(400).json({ message: 'Vehicle or Driver assigned to trip no longer exists.' });
-    }
+      if (!vehicle || !driver) {
+        throw new Error('Vehicle or Driver assigned to trip no longer exists.');
+      }
 
-    if (vehicle.status === 'OnTrip') return res.status(400).json({ message: 'Vehicle is already OnTrip.' });
-    if (driver.status === 'OnTrip') return res.status(400).json({ message: 'Driver is already OnTrip.' });
-    if (['Retired', 'InShop'].includes(vehicle.status)) return res.status(400).json({ message: 'Vehicle is not available.' });
-    if (driver.status === 'Suspended' || new Date(driver.license_expiry_date) < new Date()) {
-      return res.status(400).json({ message: 'Driver is ineligible.' });
-    }
+      if (vehicle.status === 'OnTrip') throw new Error('Vehicle is already OnTrip.');
+      if (driver.status === 'OnTrip') throw new Error('Driver is already OnTrip.');
+      if (['Retired', 'InShop'].includes(vehicle.status)) throw new Error('Vehicle is not available.');
+      if (driver.status === 'Suspended' || new Date(driver.license_expiry_date) < new Date()) {
+        throw new Error('Driver is ineligible (expired or suspended).');
+      }
 
-    // Update statuses
-    const updatedTrip = await prisma.trip.update({
-      where: { id },
-      data: {
-        status: 'Dispatched',
-        dispatched_at: new Date(),
-      },
-    });
+      const updated = await tx.trip.update({
+        where: { id },
+        data: {
+          status: 'Dispatched',
+          dispatched_at: new Date(),
+        },
+      });
 
-    await prisma.vehicle.update({
-      where: { id: trip.vehicle_id },
-      data: { status: 'OnTrip' },
-    });
+      await tx.vehicle.update({
+        where: { id: trip.vehicle_id },
+        data: { status: 'OnTrip' },
+      });
 
-    await prisma.driver.update({
-      where: { id: trip.driver_id },
-      data: { status: 'OnTrip' },
+      await tx.driver.update({
+        where: { id: trip.driver_id },
+        data: { status: 'OnTrip' },
+      });
+
+      await logAudit(tx, req.user, 'DISPATCH_TRIP', 'Trip', id);
+      return updated;
     });
 
     res.json(updatedTrip);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -483,59 +566,61 @@ app.post('/api/trips/:id/complete', authenticateToken, async (req, res) => {
   }
 
   try {
-    const trip = await prisma.trip.findUnique({ where: { id } });
-    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id } });
+      if (!trip) throw new Error('Trip not found.');
 
-    if (trip.status !== 'Dispatched') {
-      return res.status(400).json({ message: 'Only Dispatched trips can be completed.' });
-    }
+      if (trip.status !== 'Dispatched') {
+        throw new Error('Only Dispatched trips can be completed.');
+      }
 
-    const updatedTrip = await prisma.trip.update({
-      where: { id },
-      data: {
-        status: 'Completed',
-        completed_at: new Date(),
-        actual_distance: actualDistanceNum,
-        fuel_consumed: fuelConsumedNum,
-      },
-    });
-
-    // Update vehicle odometer and status
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: trip.vehicle_id } });
-    if (vehicle) {
-      await prisma.vehicle.update({
-        where: { id: trip.vehicle_id },
+      const updated = await tx.trip.update({
+        where: { id },
         data: {
-          status: 'Available',
-          odometer: Number(vehicle.odometer || 0) + actualDistanceNum,
+          status: 'Completed',
+          completed_at: new Date(),
+          actual_distance: actualDistanceNum,
+          fuel_consumed: fuelConsumedNum,
         },
       });
-    }
 
-    // Update driver status
-    await prisma.driver.update({
-      where: { id: trip.driver_id },
-      data: { status: 'Available' },
-    });
+      const vehicle = await tx.vehicle.findUnique({ where: { id: trip.vehicle_id } });
+      if (vehicle) {
+        await tx.vehicle.update({
+          where: { id: trip.vehicle_id },
+          data: {
+            status: 'Available',
+            odometer: Number(vehicle.odometer || 0) + actualDistanceNum,
+          },
+        });
+      }
 
-    // Create fuel log if fuel consumed
-    if (fuelConsumedNum > 0 && vehicle) {
-      const fuelCost = fuelConsumedNum * 100;
-      await prisma.fuelLog.create({
-        data: {
-          vehicle_id: trip.vehicle_id,
-          trip_id: trip.id,
-          liters: fuelConsumedNum,
-          cost: fuelCost,
-          date: new Date().toISOString().split('T')[0],
-        },
+      await tx.driver.update({
+        where: { id: trip.driver_id },
+        data: { status: 'Available' },
       });
-    }
+
+      if (fuelConsumedNum > 0 && vehicle) {
+        const fuelCost = fuelConsumedNum * 100;
+        await tx.fuelLog.create({
+          data: {
+            vehicle_id: trip.vehicle_id,
+            trip_id: trip.id,
+            liters: fuelConsumedNum,
+            cost: fuelCost,
+            date: new Date().toISOString().split('T')[0],
+          },
+        });
+      }
+
+      await logAudit(tx, req.user, 'COMPLETE_TRIP', 'Trip', id);
+      return updated;
+    });
 
     res.json(updatedTrip);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -543,34 +628,39 @@ app.post('/api/trips/:id/cancel', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const trip = await prisma.trip.findUnique({ where: { id } });
-    if (!trip) return res.status(404).json({ message: 'Trip not found.' });
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.findUnique({ where: { id } });
+      if (!trip) throw new Error('Trip not found.');
 
-    const originalStatus = trip.status;
-    if (!['Draft', 'Dispatched'].includes(originalStatus)) {
-      return res.status(400).json({ message: 'Only Draft or Dispatched trips can be cancelled.' });
-    }
+      const originalStatus = trip.status;
+      if (!['Draft', 'Dispatched'].includes(originalStatus)) {
+        throw new Error('Only Draft or Dispatched trips can be cancelled.');
+      }
 
-    const updatedTrip = await prisma.trip.update({
-      where: { id },
-      data: { status: 'Cancelled' },
+      const updated = await tx.trip.update({
+        where: { id },
+        data: { status: 'Cancelled' },
+      });
+
+      if (originalStatus === 'Dispatched') {
+        await tx.vehicle.update({
+          where: { id: trip.vehicle_id },
+          data: { status: 'Available' },
+        });
+        await tx.driver.update({
+          where: { id: trip.driver_id },
+          data: { status: 'Available' },
+        });
+      }
+
+      await logAudit(tx, req.user, 'CANCEL_TRIP', 'Trip', id);
+      return updated;
     });
-
-    if (originalStatus === 'Dispatched') {
-      await prisma.vehicle.update({
-        where: { id: trip.vehicle_id },
-        data: { status: 'Available' },
-      });
-      await prisma.driver.update({
-        where: { id: trip.driver_id },
-        data: { status: 'Available' },
-      });
-    }
 
     res.json(updatedTrip);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -604,25 +694,30 @@ app.post('/api/maintenance', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Cannot put a Retired vehicle into maintenance.' });
     }
 
-    const newLog = await prisma.maintenance.create({
-      data: {
-        vehicle_id,
-        type,
-        description,
-        cost: Number(cost),
-        status: 'Open',
-      },
-    });
+    const newLog = await prisma.$transaction(async (tx) => {
+      const log = await tx.maintenance.create({
+        data: {
+          vehicle_id,
+          type,
+          description,
+          cost: Number(cost),
+          status: 'Open',
+        },
+      });
 
-    await prisma.vehicle.update({
-      where: { id: vehicle_id },
-      data: { status: 'InShop' },
+      await tx.vehicle.update({
+        where: { id: vehicle_id },
+        data: { status: 'InShop' },
+      });
+
+      await logAudit(tx, req.user, 'OPEN_MAINTENANCE', 'Maintenance', log.id);
+      return log;
     });
 
     res.status(201).json(newLog);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -630,35 +725,38 @@ app.post('/api/maintenance/:id/close', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const log = await prisma.maintenance.findUnique({ where: { id } });
-    if (!log) {
-      return res.status(404).json({ message: 'Maintenance record not found.' });
-    }
+    const updatedLog = await prisma.$transaction(async (tx) => {
+      const log = await tx.maintenance.findUnique({ where: { id } });
+      if (!log) throw new Error('Maintenance record not found.');
 
-    if (log.status !== 'Open') {
-      return res.status(400).json({ message: 'Record is already closed.' });
-    }
+      if (log.status !== 'Open') {
+        throw new Error('Record is already closed.');
+      }
 
-    const updatedLog = await prisma.maintenance.update({
-      where: { id },
-      data: {
-        status: 'Closed',
-        closed_at: new Date(),
-      },
-    });
-
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: log.vehicle_id } });
-    if (vehicle && vehicle.status !== 'Retired') {
-      await prisma.vehicle.update({
-        where: { id: log.vehicle_id },
-        data: { status: 'Available' },
+      const updated = await tx.maintenance.update({
+        where: { id },
+        data: {
+          status: 'Closed',
+          closed_at: new Date(),
+        },
       });
-    }
+
+      const vehicle = await tx.vehicle.findUnique({ where: { id: log.vehicle_id } });
+      if (vehicle && vehicle.status !== 'Retired') {
+        await tx.vehicle.update({
+          where: { id: log.vehicle_id },
+          data: { status: 'Available' },
+        });
+      }
+
+      await logAudit(tx, req.user, 'CLOSE_MAINTENANCE', 'Maintenance', id);
+      return updated;
+    });
 
     res.json(updatedLog);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error.' });
+    res.status(400).json({ message: err.message || 'Internal server error.' });
   }
 });
 
@@ -741,6 +839,164 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
     });
 
     res.status(201).json(newExpense);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- COMPLIANCE ALERTS ---
+app.get('/api/compliance/alerts', authenticateToken, async (req, res) => {
+  try {
+    const drivers = await prisma.driver.findMany();
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const licenseAlerts = drivers.filter(d => {
+      const expiry = new Date(d.license_expiry_date);
+      return expiry <= thirtyDaysFromNow;
+    }).map(d => {
+      const expiry = new Date(d.license_expiry_date);
+      const isExpired = expiry < now;
+      const daysRemaining = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+      return {
+        id: d.id,
+        driver_name: d.name,
+        license_number: d.license_number,
+        license_expiry_date: d.license_expiry_date,
+        is_expired: isExpired,
+        days_remaining: daysRemaining,
+      };
+    });
+
+    const vehicles = await prisma.vehicle.findMany({
+      include: { maintenanceLogs: true }
+    });
+
+    const maintenanceAlerts = vehicles.map(v => {
+      let risk = 'Low';
+      const closedLogs = v.maintenanceLogs.filter(log => log.status === 'Closed');
+      const lastServiceDate = closedLogs.length > 0
+        ? new Date(Math.max(...closedLogs.map(l => new Date(l.closed_at || l.created_at))))
+        : new Date(v.created_at);
+
+      const daysSinceLastService = (new Date() - lastServiceDate) / (1000 * 60 * 60 * 24);
+
+      if (v.status === 'Retired') {
+        risk = 'Retired';
+      } else if (v.odometer > 35000 || daysSinceLastService > 90) {
+        risk = 'High';
+      } else if (v.odometer > 20000 || daysSinceLastService > 60) {
+        risk = 'Medium';
+      }
+
+      return {
+        id: v.id,
+        registration_number: v.registration_number,
+        name_model: v.name_model,
+        odometer: v.odometer,
+        risk,
+        days_since_service: Math.ceil(daysSinceLastService)
+      };
+    }).filter(v => v.risk === 'High' && v.status !== 'Retired');
+
+    res.json({
+      license_alerts: licenseAlerts,
+      maintenance_alerts: maintenanceAlerts,
+      total_alerts: licenseAlerts.length + maintenanceAlerts.length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- TRIP MATCH SUGGESTIONS ---
+app.get('/api/trips/match-suggestions', authenticateToken, async (req, res) => {
+  const { cargo_weight } = req.query;
+  if (!cargo_weight) {
+    return res.status(400).json({ message: 'cargo_weight is required.' });
+  }
+
+  const weight = Number(cargo_weight);
+
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      where: {
+        status: 'Available',
+        max_load_capacity: { gte: weight },
+      },
+      include: { maintenanceLogs: true },
+    });
+
+    const rankedVehicles = vehicles.map(v => {
+      let risk = 'Low';
+      const closedLogs = v.maintenanceLogs.filter(log => log.status === 'Closed');
+      const lastServiceDate = closedLogs.length > 0
+        ? new Date(Math.max(...closedLogs.map(l => new Date(l.closed_at || l.created_at))))
+        : new Date(v.created_at);
+
+      const daysSinceLastService = (new Date() - lastServiceDate) / (1000 * 60 * 60 * 24);
+
+      if (v.odometer > 35000 || daysSinceLastService > 90) {
+        risk = 'High';
+      } else if (v.odometer > 20000 || daysSinceLastService > 60) {
+        risk = 'Medium';
+      }
+
+      return {
+        id: v.id,
+        registration_number: v.registration_number,
+        name_model: v.name_model,
+        max_load_capacity: v.max_load_capacity,
+        odometer: v.odometer,
+        region: v.region,
+        status: v.status,
+        maintenance_risk: risk,
+      };
+    }).sort((a, b) => {
+      if (a.max_load_capacity !== b.max_load_capacity) {
+        return a.max_load_capacity - b.max_load_capacity;
+      }
+      const riskWeights = { Low: 1, Medium: 2, High: 3 };
+      return riskWeights[a.maintenance_risk] - riskWeights[b.maintenance_risk];
+    });
+
+    const drivers = await prisma.driver.findMany({
+      where: {
+        status: 'Available',
+      },
+    });
+
+    const eligibleDrivers = drivers.filter(d => {
+      const expiry = new Date(d.license_expiry_date);
+      return d.status === 'Available' && expiry >= new Date();
+    }).sort((a, b) => b.safety_score - a.safety_score);
+
+    res.json({
+      vehicles: rankedVehicles,
+      drivers: eligibleDrivers,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- AUDIT TRAIL LOGS ---
+app.get('/api/audit-logs', authenticateToken, async (req, res) => {
+  const { entity_type, entity_id } = req.query;
+  try {
+    const whereClause = {};
+    if (entity_type) whereClause.entity_type = entity_type;
+    if (entity_id) whereClause.entity_id = entity_id;
+
+    const logs = await prisma.auditLog.findMany({
+      where: whereClause,
+      orderBy: { timestamp: 'desc' },
+      take: 100,
+    });
+    res.json(logs);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error.' });

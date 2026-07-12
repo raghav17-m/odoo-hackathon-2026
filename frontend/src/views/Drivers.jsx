@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Plus, Search, Edit2, Trash2, X, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, AlertTriangle, ShieldAlert, History } from 'lucide-react';
 
 export default function Drivers({ user }) {
   const [drivers, setDrivers] = useState([]);
@@ -8,6 +8,11 @@ export default function Drivers({ user }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
+
+  // History State
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   // Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,6 +35,17 @@ export default function Drivers({ user }) {
     try {
       const data = await api.drivers.list();
       setDrivers(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenHistory = async (driver) => {
+    try {
+      setHistoryTarget(driver);
+      const data = await api.audit.list('Driver', driver.id);
+      setHistoryLogs(data || []);
+      setIsHistoryOpen(true);
     } catch (err) {
       console.error(err);
     }
@@ -258,13 +274,13 @@ export default function Drivers({ user }) {
                 <th className="p-4">Contact Number</th>
                 <th className="p-4 cursor-pointer hover:text-honey-dark" onClick={() => setSortBy('safety_score')}>Safety Score</th>
                 <th className="p-4">Status</th>
-                {!isReadOnly && <th className="p-4 text-right">Actions</th>}
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-honey-beige">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 7 : 8} className="p-8 text-center text-text-secondary">
+                  <td colSpan={8} className="p-8 text-center text-text-secondary">
                     No drivers registered.
                   </td>
                 </tr>
@@ -311,24 +327,33 @@ export default function Drivers({ user }) {
                         </span>
                       </td>
                       <td className="p-4">{getStatusBadge(d)}</td>
-                      {!isReadOnly && (
-                        <td className="p-4 text-right space-x-2">
-                          <button
-                            onClick={() => handleOpenEditModal(d)}
-                            className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
-                            title="Edit Driver"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(d.id)}
-                            className="p-1 hover:text-danger-red text-text-secondary rounded transition-colors inline-block cursor-pointer"
-                            title="Delete Driver"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      )}
+                      <td className="p-4 text-right space-x-2">
+                        {!isReadOnly && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEditModal(d)}
+                              className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                              title="Edit Driver"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(d.id)}
+                              className="p-1 hover:text-danger-red text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                              title="Delete Driver"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleOpenHistory(d)}
+                          className="p-1 hover:text-honey-dark text-text-secondary rounded transition-colors inline-block cursor-pointer"
+                          title="View History / Audit Log"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -471,6 +496,57 @@ export default function Drivers({ user }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* History/Audit Log Modal */}
+      {isHistoryOpen && historyTarget && (
+        <div className="fixed inset-0 bg-hive-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white w-full max-w-lg rounded-2xl border border-honey-beige shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-honey-beige flex items-center justify-between bg-bg-warm">
+              <div>
+                <h3 className="font-extrabold text-lg text-hive-black">Profile Actions History</h3>
+                <p className="text-text-secondary text-[11px]">Audit trail for {historyTarget.name}</p>
+              </div>
+              <button onClick={() => setIsHistoryOpen(false)} className="text-text-secondary hover:text-hive-black transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              {historyLogs.length === 0 ? (
+                <p className="text-center text-text-secondary py-8">No historical actions logged for this driver.</p>
+              ) : (
+                <div className="relative border-l-2 border-honey-beige pl-4 space-y-5 py-2">
+                  {historyLogs.map((log) => (
+                    <div key={log.id} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-honey-gold border border-white" />
+                      <div className="bg-bg-warm/60 p-3 rounded-xl border border-honey-beige/50">
+                        <span className="block font-bold text-hive-black uppercase tracking-wider text-[10px]">
+                          {log.action.replace(/_/g, ' ')}
+                        </span>
+                        <span className="block text-text-secondary text-[10px] mt-0.5">
+                          By: <strong className="text-hive-black">{log.user_id}</strong>
+                        </span>
+                        <span className="block text-text-secondary/60 text-[9px] mt-1">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-bg-warm border-t border-honey-beige flex justify-end">
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="px-4 py-2 bg-hive-black text-white rounded-lg font-bold text-xs cursor-pointer hover:bg-hive-black/90"
+              >
+                Close Logs
+              </button>
+            </div>
           </div>
         </div>
       )}
