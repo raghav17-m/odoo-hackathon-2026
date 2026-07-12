@@ -1,0 +1,3 @@
+@echo off
+echo Launching Ego Fleat in Google Chrome...
+start chrome "http://localhost:5000/"
