@@ -340,11 +340,13 @@ app.get('/api/drivers', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/drivers', authenticateToken, async (req, res) => {
-  const { name, license_number, license_category, license_expiry_date, contact_number, safety_score, status } = req.body;
+  const { name, email, license_number, license_category, license_expiry_date, contact_number, safety_score, status } = req.body;
 
   if (!name || !license_number || !license_category || !license_expiry_date) {
     return res.status(400).json({ message: 'Missing required driver fields.' });
   }
+
+  const driverEmail = email ? email.toLowerCase() : `${name.replace(/\s+/g, '').toLowerCase()}@egofleat.in`;
 
   try {
     const isDuplicate = await prisma.driver.findUnique({
@@ -355,10 +357,19 @@ app.post('/api/drivers', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: `License number "${license_number}" is already registered.` });
     }
 
+    const isDuplicateEmail = await prisma.driver.findUnique({
+      where: { email: driverEmail },
+    });
+
+    if (isDuplicateEmail) {
+      return res.status(400).json({ message: `Driver email "${driverEmail}" is already in use.` });
+    }
+
     const newDriver = await prisma.$transaction(async (tx) => {
       const driver = await tx.driver.create({
         data: {
           name,
+          email: driverEmail,
           license_number: license_number.toLowerCase(),
           license_category,
           license_expiry_date,
@@ -366,6 +377,16 @@ app.post('/api/drivers', authenticateToken, async (req, res) => {
           safety_score: safety_score !== undefined ? Number(safety_score) : 100,
           status: status || 'Available',
         },
+      });
+
+      const hashedPassword = await bcrypt.hash('password', 10);
+      await tx.user.create({
+        data: {
+          name,
+          email: driverEmail,
+          password: hashedPassword,
+          role: 'Driver',
+        }
       });
 
       await logAudit(tx, req.user, 'CREATE_DRIVER', 'Driver', driver.id);

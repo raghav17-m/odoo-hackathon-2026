@@ -19,8 +19,9 @@ export default function Drivers({ user }) {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
+    email: '',
     license_number: '',
-    license_category: 'CDL-A',
+    license_category: 'TRANS',
     license_expiry_date: '',
     contact_number: '',
     safety_score: '100',
@@ -59,8 +60,9 @@ export default function Drivers({ user }) {
     setEditingId(null);
     setFormData({
       name: '',
+      email: '',
       license_number: '',
-      license_category: 'CDL-A',
+      license_category: 'TRANS',
       license_expiry_date: '',
       contact_number: '',
       safety_score: '100',
@@ -74,6 +76,7 @@ export default function Drivers({ user }) {
     setEditingId(driver.id);
     setFormData({
       name: driver.name,
+      email: driver.email || '',
       license_number: driver.license_number,
       license_category: driver.license_category,
       license_expiry_date: driver.license_expiry_date,
@@ -439,6 +442,18 @@ export default function Drivers({ user }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Email Address</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
+                    placeholder="e.g. name@egofleat.in"
+                    disabled={!!editingId}
+                  />
+                </div>
+
+                <div>
                   <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Contact Number *</label>
                   <input
                     type="tel"
@@ -449,19 +464,19 @@ export default function Drivers({ user }) {
                     required
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Safety Score (0 - 100) *</label>
-                  <input
-                    type="number"
-                    value={formData.safety_score}
-                    onChange={(e) => setFormData({ ...formData, safety_score: e.target.value })}
-                    className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
-                    min="0"
-                    max="100"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="block text-text-secondary font-bold mb-1.5 uppercase tracking-wider">Safety Score (0 - 100) *</label>
+                <input
+                  type="number"
+                  value={formData.safety_score}
+                  onChange={(e) => setFormData({ ...formData, safety_score: e.target.value })}
+                  className="w-full p-2.5 rounded-lg border border-honey-beige bg-bg-warm focus:outline-none focus:ring-1 focus:ring-honey-gold"
+                  min="0"
+                  max="100"
+                  required
+                />
               </div>
 
               {editingId && (

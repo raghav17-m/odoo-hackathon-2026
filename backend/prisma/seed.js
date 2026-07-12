@@ -22,7 +22,6 @@ async function main() {
     { name: 'Rajesh Sharma', email: 'manager@egofleat.in', password: hashedPassword, role: 'FleetManager' },
     { name: 'Anjali Desai', email: 'safety@egofleat.in', password: hashedPassword, role: 'SafetyOfficer' },
     { name: 'Vikram Mehta', email: 'finance@egofleat.in', password: hashedPassword, role: 'FinancialAnalyst' },
-    { name: 'Suresh Kumar', email: 'driver@egofleat.in', password: hashedPassword, role: 'Driver' },
   ];
 
   for (const u of users) {
@@ -105,8 +104,16 @@ async function main() {
 
   for (const d of drivers) {
     await prisma.driver.create({ data: d });
+    await prisma.user.create({
+      data: {
+        name: d.name,
+        email: d.email,
+        password: hashedPassword,
+        role: 'Driver',
+      }
+    });
   }
-  console.log('Seeded drivers.');
+  console.log('Seeded drivers and matching user accounts.');
   console.log('Database seeding completed successfully.');
 }
 
