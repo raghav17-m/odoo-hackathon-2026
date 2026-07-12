@@ -1,0 +1,243 @@
+# 🚛 Transport Management System
+
+A modern **Transport Management System (TMS)** developed to help industries and companies efficiently manage employee transportation, vehicle allocation, route planning, driver management, and trip monitoring through a centralized platform.
+
+---
+
+## 📌 Overview
+
+The Transport Management System simplifies transportation operations by automating vehicle scheduling, driver assignments, trip tracking, and transport records. It reduces manual work, improves operational efficiency, and provides real-time insights into transport activities.
+
+This project is designed for:
+- 🏭 Manufacturing Industries
+- 🏢 Corporate Companies
+- 🚚 Logistics & Transport Departments
+- 🏫 Educational Institutions
+- 🏥 Hospitals
+
+---
+
+## ✨ Features
+
+### 👤 User Management
+- Secure Login & Authentication
+- Role-based Access (Admin/User)
+- User Profile Management
+
+### 🚗 Vehicle Management
+- Add, Edit & Delete Vehicles
+- Vehicle Status Monitoring
+- Vehicle Availability Tracking
+- Vehicle Maintenance Records
+
+### 👨‍✈️ Driver Management
+- Driver Registration
+- Driver Information Management
+- License Details
+- Driver Assignment
+
+### 🗺️ Route Management
+- Route Creation
+- Route Optimization
+- Pickup & Drop Point Management
+- Distance Tracking
+
+### 📅 Trip Management
+- Schedule Trips
+- Assign Vehicles & Drivers
+- Trip History
+- Trip Status Updates
+
+### 📊 Dashboard
+- Transport Statistics
+- Vehicle Utilization
+- Active Trips
+- Driver Availability
+
+### 🔍 Search & Filter
+- Search Vehicles
+- Search Drivers
+- Search Trips
+- Filter Records
+
+---
+
+## 🛠️ Technologies Used
+
+### Frontend
+- HTML5
+- CSS3
+- JavaScript
+- Bootstrap
+
+### Backend
+- Node.js
+- Express.js
+
+### Database
+- MongoDB
+
+### Other Tools
+- Git
+- GitHub
+- VS Code
+
+---
+
+## 📂 Project Structure
+
+```
+Transport-Management-System/
+│
+├── client/
+│   ├── css/
+│   ├── js/
+│   ├── images/
+│   └── index.html
+│
+├── server/
+│   ├── routes/
+│   ├── controllers/
+│   ├── models/
+│   ├── middleware/
+│   └── server.js
+│
+├── database/
+│
+├── public/
+│
+├── package.json
+│
+└── README.md
+```
+
+---
+
+## ⚙️ Installation
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/yourusername/Transport-Management-System.git
+```
+
+### Navigate to Project Folder
+
+```bash
+cd Transport-Management-System
+```
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Start the Server
+
+```bash
+npm start
+```
+
+or
+
+```bash
+npm run dev
+```
+
+---
+
+## 🚀 Future Enhancements
+
+- GPS Tracking Integration
+- Live Vehicle Tracking
+- Google Maps API Integration
+- Fuel Management
+- Driver Attendance
+- QR Code Based Vehicle Check-In
+- Mobile Application
+- Email & SMS Notifications
+- AI-Based Route Optimization
+- Predictive Vehicle Maintenance
+
+---
+
+## 📸 Screenshots
+
+Add screenshots of:
+
+- Login Page
+- Dashboard
+- Vehicle Management
+- Driver Management
+- Route Management
+- Trip Management
+
+---
+
+## 🎯 Objectives
+
+- Digitize transportation management
+- Reduce manual paperwork
+- Improve fleet efficiency
+- Optimize route planning
+- Enhance driver management
+- Generate transport reports
+- Improve operational productivity
+
+---
+
+## 📈 Benefits
+
+- Saves Time
+- Reduces Operational Cost
+- Easy Record Management
+- Better Resource Allocation
+- Improved Decision Making
+- Real-Time Monitoring
+- Scalable Architecture
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
+1. Fork the repository
+2. Create a feature branch
+
+```bash
+git checkout -b feature-name
+```
+
+3. Commit your changes
+
+```bash
+git commit -m "Added new feature"
+```
+
+4. Push to your branch
+
+```bash
+git push origin feature-name
+```
+
+5. Create a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 👨‍💻 Author
+
+**Raghav M**
+
+B.Tech – CSE (AI & ML)
+
+---
+
+### ⭐ If you found this project useful, don't forget to Star the repository!
